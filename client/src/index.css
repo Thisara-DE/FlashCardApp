@@ -46,6 +46,11 @@
     transform: rotate(0deg) translate(-3px, -3px) !important;
     box-shadow: 12px 12px 0 var(--color-ink) !important;
   }
+  /* Declared after hover so a press wins; the card is a button, so it gets the same push-in feel as .pop-btn. */
+  .pop-card:active {
+    transform: translate(2px, 2px) !important;
+    box-shadow: none !important;
+  }
 
   .pop-btn {
     transition:
@@ -102,7 +107,8 @@
     .flip-inner {
       transition: none;
     }
-    .pop-card:hover {
+    .pop-card:hover,
+    .pop-card:active {
       transform: none !important;
     }
     .pop-btn:hover:not(:disabled),
