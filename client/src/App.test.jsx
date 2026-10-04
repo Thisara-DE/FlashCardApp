@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import App from './App.jsx';
 import { STORAGE_KEY } from './hooks/useSelectedPile.js';
 import { renderWithClient } from './test-utils.jsx';
-import { requestsMade, respondError, stubApi } from './test/fakeApi.js';
+import { requestsMade, respond, respondError, stubApi } from './test/fakeApi.js';
 
 const PILES = [
   { id: 1, name: 'Geography' },
@@ -128,7 +128,8 @@ describe('App', () => {
           }),
       });
 
-      expect(screen.getByRole('status')).toHaveTextContent('Loading piles…');
+      // getByText, not getByRole('status'): the page also has an always-present (empty) live region.
+      expect(screen.getByText('Loading piles…')).toHaveAttribute('role', 'status');
       expect(screen.queryByRole('navigation', { name: 'Piles' })).not.toBeInTheDocument();
 
       finishLoading();
@@ -682,6 +683,228 @@ describe('App', () => {
     });
   });
 
+  describe('selecting cards and Move to…', () => {
+    const MOVE_ERROR = "Couldn't move those cards. Try again.";
+
+    // The card face button holding this question.
+    const cardFace = (question) => screen.getByText(question).closest('button');
+
+    // Holds the pointer down on a card until the long press fires (400 ms, real time), then releases.
+    // The click that follows a release must not toggle or flip the card.
+    async function longPress(question) {
+      const face = cardFace(question);
+      fireEvent.pointerDown(face, { clientX: 5, clientY: 5 });
+      await screen.findByText(/^\d+ selected$/, {}, { timeout: 2000 });
+      fireEvent.pointerUp(face, { clientX: 5, clientY: 5 });
+      fireEvent.click(face);
+    }
+
+    // Long-presses the first card and taps the second, so both Geography cards are selected.
+    async function selectBothGeographyCards(user) {
+      await longPress(australia.question);
+      await user.click(cardFace(france.question));
+      expect(screen.getByText('2 selected')).toBeInTheDocument();
+    }
+
+    const moveTo = () => screen.getByLabelText('Move to…');
+
+    it('long-press selects a card and shows the selection bar instead of the header buttons', async () => {
+      const { user } = renderApp();
+      await screen.findByText(australia.question);
+      await user.click(screen.getByRole('button', { name: 'New Geography card' }));
+
+      await longPress(australia.question);
+
+      expect(screen.getByText('1 selected')).toBeInTheDocument();
+      expect(screen.getByText('Drag them onto a tab, or')).toBeInTheDocument();
+      // The card is selected, not flipped.
+      expect(cardFace(australia.question)).toHaveAttribute('aria-pressed', 'true');
+      expect(cardFace(australia.question)).toHaveAccessibleName(/Selected$/);
+      expect(cardFace(france.question)).toHaveAccessibleName(/Tap to add$/);
+      // Only the other piles are offered.
+      expect(
+        within(moveTo())
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Math']);
+      // The header buttons, the tip, the new-card form and the card buttons are hidden.
+      expect(screen.getByRole('heading', { level: 2, name: 'Geography' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Delete pile' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'New Geography card' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('form', { name: 'New Geography card' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Tip: press and hold/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Toss' })).not.toBeInTheDocument();
+    });
+
+    it('tapping a card in selection mode toggles it; unselecting the last card ends selection mode', async () => {
+      const { user } = renderApp();
+      await screen.findByText(australia.question);
+
+      await selectBothGeographyCards(user);
+      await user.click(cardFace(france.question));
+      expect(screen.getByText('1 selected')).toBeInTheDocument();
+      await user.click(cardFace(australia.question));
+
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+      // Tapping did not flip either card.
+      expect(cardFace(australia.question)).toHaveAttribute('aria-pressed', 'false');
+      expect(cardFace(france.question)).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('Move to… moves the selected cards, announces it, clears selection and stays on the pile', async () => {
+      const { fetchMock, user } = renderApp();
+      await screen.findByText(australia.question);
+      await selectBothGeographyCards(user);
+
+      await user.selectOptions(moveTo(), 'Math');
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+
+      expect(await screen.findByText('Moved 2 cards to Math')).toHaveAttribute('role', 'status');
+      const post = fetchMock.mock.calls.find(([url]) => url === '/api/cards/move');
+      expect(post[1].method).toBe('POST');
+      expect(JSON.parse(post[1].body)).toEqual({
+        cardIds: [australia.id, france.id],
+        pileId: 2,
+      });
+
+      expect(await screen.findByRole('button', { name: 'Geography · 0' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Math · 3' })).toBeInTheDocument();
+      expect(await screen.findByText('No cards in Geography yet — make your first one!')).toBeInTheDocument();
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+    });
+
+    it('a failed move keeps the selection and shows "Couldn\'t move those cards. Try again."', async () => {
+      const { user } = renderApp(FIXTURE, {
+        'POST /api/cards/move': serverError,
+      });
+      await screen.findByText(australia.question);
+      await selectBothGeographyCards(user);
+
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(MOVE_ERROR);
+      expect(screen.getByText('2 selected')).toBeInTheDocument();
+      expect(screen.getByText(australia.question)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Geography · 2' })).toBeInTheDocument();
+    });
+
+    it('a retried move that succeeds removes the error', async () => {
+      let moveCount = 0;
+      const { user } = renderApp(FIXTURE, {
+        'POST /api/cards/move': (url, options, handleNormally) => {
+          moveCount += 1;
+          return moveCount === 1 ? serverError() : handleNormally();
+        },
+      });
+      await screen.findByText(australia.question);
+      await selectBothGeographyCards(user);
+
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+      await screen.findByRole('alert');
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+
+      expect(await screen.findByText('Moved 2 cards to Math')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('Esc and Clear end selection mode; switching tabs clears the selection too', async () => {
+      const { user } = renderApp();
+      await screen.findByText(australia.question);
+
+      await longPress(australia.question);
+      await user.keyboard('{Escape}');
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+
+      await longPress(australia.question);
+      await user.click(screen.getByRole('button', { name: 'Clear' }));
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+
+      await longPress(australia.question);
+      await user.click(screen.getByRole('button', { name: 'Math · 1' }));
+      await screen.findByText(squareRoot.question);
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+      // Coming back does not bring the old selection back.
+      await user.click(screen.getByRole('button', { name: 'Geography · 2' }));
+      await screen.findByText(australia.question);
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+      expect(cardFace(australia.question)).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('selected ids that vanish after a refetch are dropped from the count', async () => {
+      // France is deleted elsewhere: the first move 404s, and from then on the server no longer lists it.
+      let franceGone = false;
+      const { fetchMock, user } = renderApp(FIXTURE, {
+        'POST /api/cards/move': (url, options, handleNormally) => {
+          if (franceGone) return handleNormally();
+          franceGone = true;
+          return respondError(404, 'NOT_FOUND', 'Card not found');
+        },
+        'GET /api/cards': async (url, options, handleNormally) => {
+          const response = await handleNormally();
+          if (!franceGone) return response;
+          const cards = await response.json();
+          return respond(
+            200,
+            cards.filter((card) => card.id !== france.id),
+          );
+        },
+      });
+      await screen.findByText(australia.question);
+      await selectBothGeographyCards(user);
+
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+
+      expect(await screen.findByText('1 selected')).toBeInTheDocument();
+      expect(screen.queryByText(france.question)).not.toBeInTheDocument();
+      // A 404 is not shown as an error: the list is simply resynced.
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+
+      expect(await screen.findByText('Moved 1 card to Math')).toBeInTheDocument();
+      const moves = fetchMock.mock.calls.filter(([url]) => url === '/api/cards/move');
+      expect(JSON.parse(moves[1][1].body)).toEqual({
+        cardIds: [australia.id],
+        pileId: 2,
+      });
+    });
+
+    it('cards in Unsorted can be moved into a pile', async () => {
+      const orphan = {
+        id: 31,
+        question: 'Who wrote Hamlet?',
+        answer: 'Shakespeare',
+        pileId: null,
+      };
+      localStorage.setItem(STORAGE_KEY, 'unsorted');
+      const { user } = renderApp({
+        piles: PILES,
+        cards: [...FIXTURE.cards, orphan],
+      });
+      await screen.findByText(orphan.question);
+
+      await longPress(orphan.question);
+      // Every pile is a target from Unsorted.
+      expect(
+        within(moveTo())
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Geography', 'Math']);
+      await user.selectOptions(moveTo(), 'Math');
+      await user.click(screen.getByRole('button', { name: 'Move' }));
+
+      expect(await screen.findByText('Moved 1 card to Math')).toBeInTheDocument();
+      // Unsorted is now empty, so its tab goes and the view falls back to the first pile.
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Unsorted/ })).not.toBeInTheDocument());
+      expect(screen.getByRole('button', { name: 'Math · 2' })).toBeInTheDocument();
+    });
+  });
+
   describe('loading the cards', () => {
     it('shows the error panel with Retry when the first load fails', async () => {
       renderApp(FIXTURE, { 'GET /api/cards': serverError });
@@ -707,7 +930,7 @@ describe('App', () => {
       await user.click(screen.getByRole('button', { name: 'Retry' }));
 
       // With no cached cards React Query goes back to its loading state, so the error panel is replaced.
-      expect(await screen.findByRole('status')).toHaveTextContent('Loading cards…');
+      expect(await screen.findByText('Loading cards…')).toHaveAttribute('role', 'status');
       expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
 
       finishRetry();

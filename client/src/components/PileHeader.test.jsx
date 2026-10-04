@@ -195,6 +195,14 @@ describe('PileHeader (unsorted variant)', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('shows selectionBar in place of the hint while cards are selected', () => {
+    render(<PileHeader variant="unsorted" name="Unsorted" existingPiles={PILES} selectionBar={<p>bar</p>} />);
+
+    expect(screen.getByRole('heading', { name: 'Unsorted' })).toBeInTheDocument();
+    expect(screen.getByText('bar')).toBeInTheDocument();
+    expect(screen.queryByText(/These cards lost their pile/)).not.toBeInTheDocument();
+  });
+
   it('needs none of the pile-only props (no propTypes warnings)', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<PileHeader variant="unsorted" name="Unsorted" existingPiles={PILES} />);

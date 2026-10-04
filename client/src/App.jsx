@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from './api/cards.js';
@@ -9,13 +9,16 @@ import DeletePileDialog from './components/DeletePileDialog.jsx';
 import NoPilesState from './components/NoPilesState.jsx';
 import PileHeader from './components/PileHeader.jsx';
 import PileTabs from './components/PileTabs.jsx';
-import { useCards, useCreateCard, useDeleteCard, useUpdateCard } from './hooks/useCards.js';
+import SelectionBar from './components/SelectionBar.jsx';
+import { useCardSelection } from './hooks/useCardSelection.js';
+import { useCards, useCreateCard, useDeleteCard, useMoveCards, useUpdateCard } from './hooks/useCards.js';
 import { useCreatePile, useDeletePile, usePiles, useRenamePile } from './hooks/usePiles.js';
 import { useSelectedPile } from './hooks/useSelectedPile.js';
 import { CARDS_KEY, PILES_KEY } from './hooks/useSyncedMutation.js';
 
 const DELETE_ERROR = "Couldn't toss this card. Try again.";
 const PILE_DELETE_ERROR = "Couldn't delete this pile. Try again.";
+const MOVE_ERROR = "Couldn't move those cards. Try again.";
 const PILE_TIP = 'Tip: press and hold a card to select it, then drag it onto another pile.';
 
 // The paper panel under the tabs, and the boxes shown while the piles load.
@@ -102,6 +105,7 @@ function App() {
   const createCard = useCreateCard();
   const updateCard = useUpdateCard();
   const deleteCard = useDeleteCard();
+  const moveCards = useMoveCards();
 
   const panelHeadingId = useId();
   const [newCardOpen, setNewCardOpen] = useState(false);
@@ -125,6 +129,29 @@ function App() {
   // refetch should not replace a list the user can already see.
   const showLoadError = cardsQuery.isError && cards === undefined;
 
+  // Selected cards, for Move to…. Only ids of cards that are still on screen count.
+  const { selectedIds, isSelecting, select, toggle, clear } = useCardSelection(cards ?? []);
+  const [moveError, setMoveError] = useState(null);
+  // Read out by screen readers after a move, e.g. "Moved 2 cards to Math".
+  const [moveAnnouncement, setMoveAnnouncement] = useState('');
+
+  const isDialogOpen = cardToDelete !== null || pileToDelete !== null;
+
+  // Esc ends selection mode. Not while a dialog is open: there, Esc closes the dialog instead.
+  useEffect(() => {
+    if (!isSelecting || isDialogOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        clear();
+        setMoveError(null);
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSelecting, isDialogOpen, clear]);
+
   // Used when the server says something is gone: another tab or device changed the data.
   function refetchCardsAndPiles() {
     queryClient.invalidateQueries({ queryKey: CARDS_KEY });
@@ -134,6 +161,46 @@ function App() {
   function handleSelectPile(key) {
     setSelectedKey(key);
     setNewCardOpen(false);
+    clearSelection();
+  }
+
+  function clearSelection() {
+    clear();
+    setMoveError(null);
+  }
+
+  // An old move error was about a different set of cards, so any change to the selection hides it.
+  function handleLongPress(cardId) {
+    setMoveError(null);
+    select(cardId);
+  }
+
+  function handleToggleSelect(cardId) {
+    setMoveError(null);
+    toggle(cardId);
+  }
+
+  // Moves every selected card into the pile with this id. Move to… calls it; so will dropping on a tab.
+  async function handleMove(pileId) {
+    const target = piles.find((pile) => pile.id === pileId);
+    setMoveError(null);
+    // Empty it first, so moving the same number of cards to the same pile twice is announced twice.
+    setMoveAnnouncement('');
+    try {
+      await moveCards.mutateAsync({ cardIds: selectedIds, pileId });
+      const count = selectedIds.length;
+      setMoveAnnouncement(`Moved ${count} ${plural(count, 'card', 'cards')} to ${target.name}`);
+      clear();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        // A card or the pile was deleted elsewhere. Refetch: vanished cards drop out of the
+        // selection, and a vanished pile drops out of Move to….
+        refetchCardsAndPiles();
+      } else {
+        // Keep the selection, so the user can simply try again.
+        setMoveError(MOVE_ERROR);
+      }
+    }
   }
 
   // PileTabs selects the new pile itself once this resolves.
@@ -241,10 +308,29 @@ function App() {
     // Unsorted is only reachable while it has cards, so its empty message is just a fallback.
     const emptyMessage = isUnsorted ? 'No unsorted cards.' : `No cards in ${name} yet — make your first one!`;
 
+    // While cards are selected, the selection bar takes the place of the header buttons.
+    const selectionBar = isSelecting ? (
+      <SelectionBar
+        count={selectedIds.length}
+        // Cards can go to any pile except the one they are in (Unsorted is not a pile).
+        targets={piles.filter((pile) => pile.id !== selectedKey)}
+        onMove={handleMove}
+        onClear={clearSelection}
+        pending={moveCards.isPending}
+        error={moveError}
+      />
+    ) : null;
+
     return (
       <section aria-labelledby={panelHeadingId} className={`${PANEL} flex flex-col gap-6`}>
         {isUnsorted ? (
-          <PileHeader variant="unsorted" name={name} headingId={panelHeadingId} existingPiles={piles} />
+          <PileHeader
+            variant="unsorted"
+            name={name}
+            headingId={panelHeadingId}
+            existingPiles={piles}
+            selectionBar={selectionBar}
+          />
         ) : (
           <PileHeader
             variant="pile"
@@ -257,10 +343,11 @@ function App() {
             newCardOpen={newCardOpen}
             onToggleNewCard={() => setNewCardOpen((open) => !open)}
             newCardButtonRef={newCardButtonRef}
+            selectionBar={selectionBar}
           />
         )}
-        {!isUnsorted && <p className="-mt-2 font-medium">{PILE_TIP}</p>}
-        {!isUnsorted && newCardOpen && (
+        {!isUnsorted && !isSelecting && <p className="-mt-2 font-medium">{PILE_TIP}</p>}
+        {!isUnsorted && !isSelecting && newCardOpen && (
           <div className="max-w-[480px]">
             <CardForm
               // A fresh form per pile, so half-typed text never lands in a different pile.
@@ -284,6 +371,10 @@ function App() {
           onRetry={() => cardsQuery.refetch()}
           onSaveCard={(id, values) => updateCard.mutateAsync({ id, ...values })}
           onRequestDelete={handleRequestDelete}
+          selectedIds={selectedIds}
+          selectionMode={isSelecting}
+          onLongPress={handleLongPress}
+          onToggleSelect={handleToggleSelect}
         />
       </section>
     );
@@ -345,6 +436,11 @@ function App() {
 
         <main>{renderMain()}</main>
       </div>
+
+      {/* Always on the page, so screen readers notice when its text changes. */}
+      <p role="status" className="sr-only">
+        {moveAnnouncement}
+      </p>
 
       <ConfirmDialog
         open={cardToDelete !== null}

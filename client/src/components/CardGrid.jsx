@@ -14,6 +14,10 @@ export default function CardGrid({
   onRetry,
   onSaveCard,
   onRequestDelete,
+  selectedIds = [],
+  selectionMode = false,
+  onLongPress,
+  onToggleSelect,
 }) {
   function renderBody() {
     if (isLoading) {
@@ -60,6 +64,10 @@ export default function CardGrid({
               card={card}
               onSave={(values) => onSaveCard(card.id, values)}
               onRequestDelete={onRequestDelete}
+              selected={selectedIds.includes(card.id)}
+              selectionMode={selectionMode}
+              onLongPress={onLongPress}
+              onToggleSelect={onToggleSelect}
             />
           </li>
         ))}
@@ -87,4 +95,11 @@ CardGrid.propTypes = {
   onRetry: PropTypes.func.isRequired,
   onSaveCard: PropTypes.func.isRequired,
   onRequestDelete: PropTypes.func.isRequired,
+  // Ids of the selected cards.
+  selectedIds: PropTypes.arrayOf(PropTypes.number),
+  // True while any card is selected.
+  selectionMode: PropTypes.bool,
+  // Both are called with a card id: after a press and hold, and on a tap in selection mode.
+  onLongPress: PropTypes.func.isRequired,
+  onToggleSelect: PropTypes.func.isRequired,
 };

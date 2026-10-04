@@ -58,7 +58,7 @@ function PileHeaderBody({
         <h2 id={headingId} className="font-display text-[32px] uppercase">
           {name}
         </h2>
-        <p className="font-medium">{UNSORTED_HINT}</p>
+        {selectionBar ?? <p className="font-medium">{UNSORTED_HINT}</p>}
       </header>
     );
   }
@@ -153,7 +153,7 @@ const propTypes = {
   newCardOpen: PropTypes.bool,
   onToggleNewCard: PropTypes.func,
   newCardButtonRef: PropTypes.shape({ current: PropTypes.any }),
-  // While cards are selected, this replaces the buttons.
+  // While cards are selected, this replaces the buttons (and, for Unsorted, the hint).
   selectionBar: PropTypes.node,
 };
 

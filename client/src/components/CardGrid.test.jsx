@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CardGrid from './CardGrid.jsx';
 
@@ -11,6 +11,8 @@ function renderGrid(props = {}) {
     onRetry: vi.fn(),
     onSaveCard: vi.fn().mockResolvedValue(undefined),
     onRequestDelete: vi.fn(),
+    onLongPress: vi.fn(),
+    onToggleSelect: vi.fn(),
   };
   const allProps = {
     cards: [],
@@ -120,5 +122,59 @@ describe('CardGrid', () => {
     await user.click(within(firstItem).getByRole('button', { name: 'Toss' }));
 
     expect(onRequestDelete).toHaveBeenCalledWith(card1);
+  });
+
+  describe('selection', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('marks only the selected cards as selected', () => {
+      renderGrid({
+        cards: [card1, card2],
+        selectionMode: true,
+        selectedIds: [2],
+      });
+
+      expect(screen.getByRole('button', { name: /capital of france/i })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: /capital of australia/i })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: /capital of france/i })).toHaveClass('is-selected');
+    });
+
+    it('passes selection mode to every card (Edit and Toss hidden)', () => {
+      renderGrid({
+        cards: [card1, card2],
+        selectionMode: true,
+        selectedIds: [2],
+      });
+
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Toss' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /capital of australia/i })).toHaveAccessibleName(/Tap to add$/);
+      expect(screen.getByRole('button', { name: /capital of france/i })).toHaveAccessibleName(/Selected$/);
+    });
+
+    it('calls onToggleSelect with the tapped card id in selection mode', async () => {
+      const { onToggleSelect, user } = renderGrid({
+        cards: [card1, card2],
+        selectionMode: true,
+        selectedIds: [2],
+      });
+
+      await user.click(screen.getByRole('button', { name: /capital of australia/i }));
+
+      expect(onToggleSelect).toHaveBeenCalledWith(1);
+    });
+
+    it('calls onLongPress with the held card id', () => {
+      vi.useFakeTimers();
+      const { onLongPress } = renderGrid({ cards: [card1, card2] });
+      const face = screen.getByRole('button', { name: /capital of france/i });
+
+      fireEvent.pointerDown(face, { clientX: 5, clientY: 5 });
+      act(() => vi.advanceTimersByTime(400));
+
+      expect(onLongPress).toHaveBeenCalledWith(2);
+    });
   });
 });

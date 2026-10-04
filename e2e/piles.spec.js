@@ -28,10 +28,12 @@ test('a card made in a pile shows only in that pile', async ({ page }) => {
   await expect(page.getByRole('button', { name: `${pileA} · 1` })).toBeVisible();
 });
 
-test('deleting a pile and keeping its cards moves them to Unsorted', async ({ page }) => {
+test('deleting a pile keeps its cards in Unsorted, and Move to… moves them into a pile', async ({ page }) => {
   const pileName = uniqueName('Keep');
+  const targetName = uniqueName('Target');
   const question = uniqueName('Kept card?');
   await page.goto('/');
+  await createPile(page, targetName);
   await createPile(page, pileName);
   await addCard(page, pileName, question);
 
@@ -46,7 +48,33 @@ test('deleting a pile and keeping its cards moves them to Unsorted', async ({ pa
   const unsortedTab = page.getByRole('button', { name: /^Unsorted · \d+$/ });
   await unsortedTab.click();
   await expect(page.getByRole('heading', { name: 'Unsorted', exact: true })).toBeVisible();
-  await expect(page.getByRole('listitem').filter({ hasText: question })).toBeVisible();
+  const card = page.getByRole('listitem').filter({ hasText: question });
+  await expect(card).toBeVisible();
+
+  // Press and hold the card (400 ms) to select it.
+  const face = card.getByRole('button', { name: question });
+  await face.hover();
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  await page.mouse.up();
+  await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+  await expect(face).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByLabel('Move to…').selectOption({ label: targetName });
+  await page.getByRole('button', { name: 'Move', exact: true }).click();
+
+  await expect(page.getByText(`Moved 1 card to ${targetName}`)).toBeAttached();
+  await expect(page.getByRole('button', { name: `${targetName} · 1` })).toBeVisible();
+  // Other tests may have left their own cards in Unsorted, so the Unsorted tab can stay. Check that
+  // our card left Unsorted by asking the API rather than by the tab disappearing.
+  const response = await page.request.get('/api/cards?pileId=unsorted');
+  expect(response.ok()).toBe(true);
+  const unsortedQuestions = (await response.json()).map((unsorted) => unsorted.question);
+  expect(unsortedQuestions).not.toContain(question);
+
+  await page.getByRole('button', { name: `${targetName} · 1` }).click();
+  await expect(page.getByRole('heading', { name: targetName, exact: true })).toBeVisible();
+  await expect(card).toBeVisible();
 });
 
 test('deleting a pile and its cards removes them for good', async ({ page }) => {
