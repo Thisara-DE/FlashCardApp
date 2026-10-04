@@ -159,19 +159,17 @@ app.get(
     const query = parseOr400(cardsQuerySchema, req.query, res, 'Invalid card filter');
     if (!query) return;
 
-    // No pileId means no filter. 'unsorted' is cards without a pile; a number must be a real pile.
-    const where = {};
-    if (query.pileId === 'unsorted') {
-      where.pileId = null;
-    } else if (query.pileId !== undefined) {
+    // 'unsorted' is cards without a pile; a number must be a real pile.
+    let pileId = null;
+    if (query.pileId !== 'unsorted') {
       // findByIdOr404 takes the id as text, like it arrives in a URL.
       if (!(await findByIdOr404(Pile, String(query.pileId), res, 'Pile not found'))) return;
-      where.pileId = query.pileId;
+      pileId = query.pileId;
     }
 
     // id is the tie-break so cards created in the same millisecond keep a stable order.
     const cards = await Card.findAll({
-      where,
+      where: { pileId },
       order: [
         ['createdAt', 'DESC'],
         ['id', 'DESC'],
@@ -186,9 +184,7 @@ app.post(
   asyncHandler(async (req, res) => {
     const data = parseOr400(createCardSchema, req.body, res, 'Invalid card');
     if (!data) return;
-    if (data.pileId !== undefined) {
-      if (!(await findByIdOr404(Pile, String(data.pileId), res, 'Pile not found'))) return;
-    }
+    if (!(await findByIdOr404(Pile, String(data.pileId), res, 'Pile not found'))) return;
     const card = await Card.create(data);
     res.status(201).json(card);
   }),

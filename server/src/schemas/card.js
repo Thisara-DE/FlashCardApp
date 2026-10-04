@@ -24,9 +24,9 @@ export const cardSchema = z.object({
 const pileIdField = (message) =>
   z.number({ required_error: message, invalid_type_error: message }).int(message).positive(message);
 
-// pileId is optional for now so the current client keeps working.
+// Every new card goes into a pile.
 export const createCardSchema = cardSchema.extend({
-  pileId: pileIdField('Pick a pile for this card').optional(),
+  pileId: pileIdField('Pick a pile for this card'),
 });
 
 // Query strings are always text, so we check the format first and then convert.
@@ -36,8 +36,7 @@ export const cardsQuerySchema = z.object({
   pileId: z
     .string({ required_error: 'pileId is required', invalid_type_error: PILE_FILTER_MESSAGE })
     .regex(/^([1-9]\d*|unsorted)$/, PILE_FILTER_MESSAGE)
-    .transform((value) => (value === 'unsorted' ? value : Number(value)))
-    .optional(),
+    .transform((value) => (value === 'unsorted' ? value : Number(value))),
 });
 
 const MAX_MOVE_CARDS = 100;

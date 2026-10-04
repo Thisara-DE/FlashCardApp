@@ -194,4 +194,25 @@ describe('PileHeader (unsorted variant)', () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('needs none of the pile-only props (no propTypes warnings)', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<PileHeader variant="unsorted" name="Unsorted" existingPiles={PILES} />);
+
+    expect(screen.getByRole('heading', { name: 'Unsorted' })).toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});
+
+describe('PileHeader headingId', () => {
+  it('puts headingId on the pile heading, so a panel can be labelled by it', () => {
+    renderHeader({ headingId: 'pile-heading' });
+    expect(screen.getByRole('heading', { name: 'Geography' })).toHaveAttribute('id', 'pile-heading');
+  });
+
+  it('puts headingId on the Unsorted heading too', () => {
+    render(<PileHeader variant="unsorted" name="Unsorted" existingPiles={PILES} headingId="pile-heading" />);
+    expect(screen.getByRole('heading', { name: 'Unsorted' })).toHaveAttribute('id', 'pile-heading');
+  });
 });

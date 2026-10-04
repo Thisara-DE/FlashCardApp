@@ -1,13 +1,16 @@
 import { test, expect } from '@playwright/test';
-
-// Unique per run so the test never collides with cards that already exist.
-const q = `E2E question ${Date.now()}`;
+import { createPile, uniqueName } from './helpers.js';
 
 test('create, flip, edit and delete a card', async ({ page }) => {
+  // Unique per run so the test never collides with cards that already exist.
+  const q = uniqueName('E2E question');
+  const pileName = uniqueName('Cards');
   await page.goto('/');
+  await createPile(page, pileName);
 
-  // Create
-  const createForm = page.getByRole('form', { name: 'Make a card' });
+  // Create, from the pile's "New ‹Name› card" button.
+  await page.getByRole('button', { name: `New ${pileName} card` }).click();
+  const createForm = page.getByRole('form', { name: `New ${pileName} card` });
   await createForm.getByLabel(/^Question/).fill(q);
   await createForm.getByLabel(/^Answer/).fill('E2E answer');
   await createForm.getByRole('button', { name: 'Slam it in!' }).click();
@@ -17,6 +20,7 @@ test('create, flip, edit and delete a card', async ({ page }) => {
   const face = card.locator('button[aria-pressed]');
   await expect(face).toBeVisible();
   await expect(face).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: `${pileName} · 1` })).toBeVisible();
 
   // Flip
   await face.click();
@@ -32,8 +36,9 @@ test('create, flip, edit and delete a card', async ({ page }) => {
   await expect(editForm).toBeHidden();
   await expect(card.getByText(`${q} edited`)).toBeVisible();
 
-  // The edit must survive a reload, i.e. it reached the database.
+  // The edit must survive a reload, i.e. it reached the database. The pile is remembered too.
   await page.reload();
+  await expect(page.getByRole('button', { name: `${pileName} · 1` })).toHaveAttribute('aria-pressed', 'true');
   const editedCard = page.getByRole('listitem').filter({ hasText: `${q} edited` });
   await expect(editedCard).toBeVisible();
 
@@ -50,10 +55,12 @@ test('create, flip, edit and delete a card', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Toss it' }).click();
   // The card only leaves the list after the DELETE succeeded and the list was refetched.
   await expect(editedCard).toHaveCount(0);
+  await expect(page.getByText(`No cards in ${pileName} yet — make your first one!`)).toBeVisible();
 
   // Still gone after a reload.
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'The pile' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: pileName, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: `${pileName} · 0` })).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: q })).toHaveCount(0);
 });
 
@@ -65,9 +72,12 @@ test('invalid input is rejected without calling the API', async ({ page }) => {
     }
   });
 
+  const pileName = uniqueName('Invalid');
   await page.goto('/');
+  await createPile(page, pileName);
 
-  const createForm = page.getByRole('form', { name: 'Make a card' });
+  await page.getByRole('button', { name: `New ${pileName} card` }).click();
+  const createForm = page.getByRole('form', { name: `New ${pileName} card` });
   await createForm.getByLabel(/^Question/).fill('   ');
   await createForm.getByLabel(/^Answer/).fill('x');
   await createForm.getByRole('button', { name: 'Slam it in!' }).click();

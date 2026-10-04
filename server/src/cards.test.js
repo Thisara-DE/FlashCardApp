@@ -15,10 +15,21 @@ beforeAll(async () => {
 });
 
 describe('GET /api/cards', () => {
-  it('returns all cards, newest first', async () => {
+  it('without pileId returns 400 pileId is required', async () => {
     const res = await request(app).get('/api/cards');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid card filter',
+      details: { pileId: 'pileId is required' },
+    });
+  });
+
+  it("returns the pile's cards, newest first", async () => {
+    const res = await request(app).get(`/api/cards?pileId=${geography.id}`);
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(SEED_PILES.flatMap((p) => p.cards).length);
+    const seededGeography = SEED_PILES.find((p) => p.name === 'Geography');
+    expect(res.body).toHaveLength(seededGeography.cards.length);
     // Seed rows share a createdAt; the id DESC tie-break makes the order stable.
     const ids = res.body.map((c) => c.id);
     expect(ids).toEqual([...ids].sort((a, b) => b - a));
@@ -71,7 +82,7 @@ describe('GET /api/cards', () => {
   it('returns 500 INTERNAL_ERROR without a stack trace when the database fails', async () => {
     vi.spyOn(Card, 'findAll').mockRejectedValueOnce(new Error('disk on fire'));
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const res = await request(app).get('/api/cards');
+    const res = await request(app).get(`/api/cards?pileId=${geography.id}`);
     expect(res.status).toBe(500);
     expect(res.body).toEqual({
       error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' },
@@ -85,18 +96,18 @@ describe('POST /api/cards', () => {
   it('creates a trimmed card, returns 201, and lists it first', async () => {
     const res = await request(app)
       .post('/api/cards')
-      .send({ question: '  Capital of Peru?  ', answer: ' Lima ', extra: 'x' });
+      .send({ question: '  Capital of Peru?  ', answer: ' Lima ', pileId: geography.id, extra: 'x' });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ question: 'Capital of Peru?', answer: 'Lima' });
+    expect(res.body).toMatchObject({ question: 'Capital of Peru?', answer: 'Lima', pileId: geography.id });
     expect(res.body).not.toHaveProperty('extra');
-    const list = await request(app).get('/api/cards');
+    const list = await request(app).get(`/api/cards?pileId=${geography.id}`);
     expect(list.body[0].id).toBe(res.body.id);
   });
 
   it('accepts exactly 200 characters', async () => {
     const res = await request(app)
       .post('/api/cards')
-      .send({ question: 'q'.repeat(200), answer: 'a'.repeat(200) });
+      .send({ question: 'q'.repeat(200), answer: 'a'.repeat(200), pileId: geography.id });
     expect(res.status).toBe(201);
   });
 
@@ -105,14 +116,28 @@ describe('POST /api/cards', () => {
     [{ question: '   ', answer: 'A' }, { question: 'Question is required' }],
     [{ question: 'Q', answer: 'a'.repeat(201) }, { answer: 'Answer must be 200 characters or fewer' }],
     [{ question: 123, answer: null }, { question: 'Question must be text', answer: 'Answer must be text' }],
-  ])('rejects %j with 400 VALIDATION_ERROR', async (body, details) => {
+  ])('rejects %j (sent to a real pile) with 400 VALIDATION_ERROR', async (body, details) => {
     const before = await Card.count();
-    const res = await request(app).post('/api/cards').send(body);
+    const res = await request(app)
+      .post('/api/cards')
+      .send({ ...body, pileId: geography.id });
     expect(res.status).toBe(400);
     expect(res.body.error).toEqual({
       code: 'VALIDATION_ERROR',
       message: 'Invalid card',
       details,
+    });
+    expect(await Card.count()).toBe(before);
+  });
+
+  it('without pileId returns 400 Pick a pile for this card and creates nothing', async () => {
+    const before = await Card.count();
+    const res = await request(app).post('/api/cards').send({ question: 'Q', answer: 'A' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid card',
+      details: { pileId: 'Pick a pile for this card' },
     });
     expect(await Card.count()).toBe(before);
   });
@@ -162,7 +187,9 @@ describe('POST /api/cards', () => {
 });
 
 async function makeCard() {
-  const res = await request(app).post('/api/cards').send({ question: 'Old?', answer: 'Old' });
+  const res = await request(app)
+    .post('/api/cards')
+    .send({ question: 'Old?', answer: 'Old', pileId: geography.id });
   return res.body;
 }
 

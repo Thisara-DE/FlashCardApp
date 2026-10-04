@@ -19,10 +19,11 @@ function PileHeaderBody({
   variant,
   name,
   pileId,
+  headingId,
   existingPiles,
   onRename,
   onRequestDelete,
-  newCardOpen,
+  newCardOpen = false,
   onToggleNewCard,
   newCardButtonRef,
   selectionBar,
@@ -54,7 +55,9 @@ function PileHeaderBody({
   if (variant === 'unsorted') {
     return (
       <header className="flex flex-col gap-2">
-        <h2 className="font-display text-[32px] uppercase">{name}</h2>
+        <h2 id={headingId} className="font-display text-[32px] uppercase">
+          {name}
+        </h2>
         <p className="font-medium">{UNSORTED_HINT}</p>
       </header>
     );
@@ -78,7 +81,9 @@ function PileHeaderBody({
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="font-display text-[32px] uppercase">{name}</h2>
+          <h2 id={headingId} className="font-display text-[32px] uppercase">
+            {name}
+          </h2>
           {!selectionBar && (
             <>
               <button
@@ -134,16 +139,19 @@ const propTypes = {
   name: PropTypes.string.isRequired,
   // Only the pile variant has an id (Unsorted is not a real pile).
   pileId: PropTypes.number,
+  // Put on the <h2>, so the surrounding panel can use it for aria-labelledby.
+  headingId: PropTypes.string,
   existingPiles: PropTypes.arrayOf(
     PropTypes.shape({
       id: PropTypes.number.isRequired,
       name: PropTypes.string.isRequired,
     }),
   ).isRequired,
-  onRename: PropTypes.func.isRequired,
-  onRequestDelete: PropTypes.func.isRequired,
-  newCardOpen: PropTypes.bool.isRequired,
-  onToggleNewCard: PropTypes.func.isRequired,
+  // The next four are used by the pile variant only (Unsorted has no buttons).
+  onRename: PropTypes.func,
+  onRequestDelete: PropTypes.func,
+  newCardOpen: PropTypes.bool,
+  onToggleNewCard: PropTypes.func,
   newCardButtonRef: PropTypes.shape({ current: PropTypes.any }),
   // While cards are selected, this replaces the buttons.
   selectionBar: PropTypes.node,

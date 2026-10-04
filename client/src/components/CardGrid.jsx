@@ -1,21 +1,20 @@
-import { useId } from 'react';
 import PropTypes from 'prop-types';
 import FlashCard from './FlashCard.jsx';
 
 // Same white bordered panel look as the create form.
 const PANEL = 'border-4 border-ink bg-white p-7 shadow-[10px_10px_0_var(--color-ink)]';
 
+// The cards of one pile. It has no heading of its own: the pile panel's header names it.
 export default function CardGrid({
   cards,
   isLoading,
   isError,
   isFetching = false,
+  emptyMessage,
   onRetry,
   onSaveCard,
   onRequestDelete,
 }) {
-  const headingId = useId();
-
   function renderBody() {
     if (isLoading) {
       return (
@@ -48,7 +47,7 @@ export default function CardGrid({
     }
 
     if (!cards || cards.length === 0) {
-      return <p className={`${PANEL} text-xl font-bold`}>No cards yet — make your first one!</p>;
+      return <p className={`${PANEL} text-xl font-bold`}>{emptyMessage}</p>;
     }
 
     return (
@@ -68,17 +67,7 @@ export default function CardGrid({
     );
   }
 
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h2 id={headingId} className="font-display text-[32px] uppercase">
-          The pile
-        </h2>
-        <p className="text-base font-bold">Tap a card to flip it — newest on top</p>
-      </div>
-      {renderBody()}
-    </section>
-  );
+  return <div>{renderBody()}</div>;
 }
 
 CardGrid.propTypes = {
@@ -93,6 +82,8 @@ CardGrid.propTypes = {
   isError: PropTypes.bool.isRequired,
   // True while a (re)fetch is running; disables Retry so it cannot be spammed.
   isFetching: PropTypes.bool,
+  // Shown when the pile has no cards, e.g. "No cards in Math yet — make your first one!"
+  emptyMessage: PropTypes.string.isRequired,
   onRetry: PropTypes.func.isRequired,
   onSaveCard: PropTypes.func.isRequired,
   onRequestDelete: PropTypes.func.isRequired,

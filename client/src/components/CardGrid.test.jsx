@@ -12,17 +12,25 @@ function renderGrid(props = {}) {
     onSaveCard: vi.fn().mockResolvedValue(undefined),
     onRequestDelete: vi.fn(),
   };
-  const allProps = { cards: [], isLoading: false, isError: false, isFetching: false, ...handlers, ...props };
+  const allProps = {
+    cards: [],
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    emptyMessage: 'No cards in Geography yet — make your first one!',
+    ...handlers,
+    ...props,
+  };
   const view = render(<CardGrid {...allProps} />);
   return { ...handlers, ...view, props: allProps, user: userEvent.setup() };
 }
 
 describe('CardGrid', () => {
-  it('always shows the heading and the hint', () => {
-    renderGrid();
+  it('has no heading of its own (the pile panel header names it)', () => {
+    renderGrid({ cards: [card1] });
 
-    expect(screen.getByRole('heading', { name: 'The pile' })).toBeInTheDocument();
-    expect(screen.getByText('Tap a card to flip it — newest on top')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
   });
 
   it('shows a loading status while loading', () => {
@@ -62,10 +70,10 @@ describe('CardGrid', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('shows the empty message when there are no cards', () => {
-    renderGrid({ cards: [] });
+  it('shows the emptyMessage when there are no cards', () => {
+    renderGrid({ cards: [], emptyMessage: 'No cards in Math yet — make your first one!' });
 
-    expect(screen.getByText('No cards yet — make your first one!')).toBeInTheDocument();
+    expect(screen.getByText('No cards in Math yet — make your first one!')).toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
 

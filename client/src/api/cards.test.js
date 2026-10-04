@@ -15,12 +15,20 @@ describe('cards API', () => {
     vi.unstubAllGlobals();
   });
 
-  it('listCards() fetches /api/cards and returns the parsed array', async () => {
-    const cards = [{ id: 1, question: 'Q', answer: 'A' }];
+  it("listCards(pileId) fetches that pile's cards and returns the parsed array", async () => {
+    const cards = [{ id: 1, question: 'Q', answer: 'A', pileId: 3 }];
     fetch.mockResolvedValue(respond(200, cards));
 
-    await expect(listCards()).resolves.toEqual(cards);
-    expect(fetch).toHaveBeenCalledWith('/api/cards', expect.anything());
+    await expect(listCards(3)).resolves.toEqual(cards);
+    expect(fetch).toHaveBeenCalledWith('/api/cards?pileId=3', expect.anything());
+  });
+
+  it("listCards('unsorted') fetches the cards without a pile", async () => {
+    fetch.mockResolvedValue(respond(200, []));
+
+    await listCards('unsorted');
+
+    expect(fetch).toHaveBeenCalledWith('/api/cards?pileId=unsorted', expect.anything());
   });
 
   it('createCard() POSTs the card, including its pile, as JSON', async () => {
@@ -104,7 +112,7 @@ describe('cards API', () => {
       },
     });
 
-    const error = await listCards().catch((e) => e);
+    const error = await listCards(1).catch((e) => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({

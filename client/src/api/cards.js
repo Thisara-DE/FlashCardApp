@@ -3,8 +3,9 @@ import { request } from './request.js';
 // Re-exported so existing imports of ApiError from cards.js keep working.
 export { ApiError } from './request.js';
 
-export function listCards() {
-  return request('/api/cards');
+// pileKey is a pile id or 'unsorted' (the cards whose pile was deleted).
+export function listCards(pileKey) {
+  return request(`/api/cards?pileId=${encodeURIComponent(pileKey)}`);
 }
 
 export function createCard({ question, answer, pileId }) {
