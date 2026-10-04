@@ -7,7 +7,15 @@ const SMALL_BUTTON = 'pop-btn min-h-11 cursor-pointer border-4 border-ink px-4 p
 const UNSORTED_HINT =
   'These cards lost their pile. Press and hold a card to select it, then drag it onto a pile.';
 
-export default function PileHeader({
+// The key remounts the body when the pile, the variant or selection mode changes, so a half-finished
+// rename (open form, typed text, target pile) can never carry over to a different pile or view.
+export default function PileHeader(props) {
+  const { variant, pileId, selectionBar } = props;
+  const key = `${variant}-${pileId ?? 'none'}-${selectionBar ? 'selecting' : 'idle'}`;
+  return <PileHeaderBody key={key} {...props} />;
+}
+
+function PileHeaderBody({
   variant,
   name,
   pileId,
@@ -121,7 +129,7 @@ export default function PileHeader({
   );
 }
 
-PileHeader.propTypes = {
+const propTypes = {
   variant: PropTypes.oneOf(['pile', 'unsorted']).isRequired,
   name: PropTypes.string.isRequired,
   // Only the pile variant has an id (Unsorted is not a real pile).
@@ -140,3 +148,6 @@ PileHeader.propTypes = {
   // While cards are selected, this replaces the buttons.
   selectionBar: PropTypes.node,
 };
+
+PileHeaderBody.propTypes = propTypes;
+PileHeader.propTypes = propTypes;

@@ -127,6 +127,52 @@ describe('PileHeader (pile variant)', () => {
   });
 });
 
+describe('PileHeader rename state across changes', () => {
+  const baseProps = {
+    existingPiles: PILES,
+    onRename: vi.fn().mockResolvedValue(undefined),
+    onRequestDelete: vi.fn(),
+    newCardOpen: false,
+    onToggleNewCard: vi.fn(),
+  };
+
+  it('closes the rename form when a different pile is shown', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<PileHeader variant="pile" name="Geography" pileId={1} {...baseProps} />);
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+    expect(screen.getByLabelText('Pile name')).toHaveValue('Geography');
+
+    rerender(<PileHeader variant="pile" name="Math" pileId={2} {...baseProps} />);
+
+    expect(screen.queryByLabelText('Pile name')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Math' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+  });
+
+  it('does not reopen the rename form after a trip through Unsorted', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<PileHeader variant="pile" name="Geography" pileId={1} {...baseProps} />);
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+
+    rerender(<PileHeader variant="unsorted" name="Unsorted" {...baseProps} />);
+    rerender(<PileHeader variant="pile" name="Geography" pileId={1} {...baseProps} />);
+
+    expect(screen.queryByLabelText('Pile name')).not.toBeInTheDocument();
+  });
+
+  it('abandons an open rename when selection mode starts', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<PileHeader variant="pile" name="Geography" pileId={1} {...baseProps} />);
+    await user.click(screen.getByRole('button', { name: 'Rename' }));
+
+    rerender(<PileHeader variant="pile" name="Geography" pileId={1} {...baseProps} selectionBar={<p>bar</p>} />);
+    rerender(<PileHeader variant="pile" name="Geography" pileId={1} {...baseProps} />);
+
+    expect(screen.queryByLabelText('Pile name')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument();
+  });
+});
+
 describe('PileHeader (unsorted variant)', () => {
   it('shows the heading and the hint, and no buttons', () => {
     render(
