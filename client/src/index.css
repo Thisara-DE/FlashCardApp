@@ -1,1 +1,124 @@
 @import 'tailwindcss';
+
+/* Comic Pop design tokens; Tailwind turns these into utilities like bg-sun and font-display. */
+@theme {
+  --color-sun: #ffe14d;
+  --color-ink: #111111;
+  --color-pop: #ff3d7f;
+  --color-zap: #2d5bff;
+  --color-mint: #2ee6a6;
+  --color-paper: #fff8d6;
+  --font-display: 'Bowlby One', sans-serif;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    background: var(--color-sun);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+  }
+}
+
+@layer components {
+  /* Cards in the grid tilt in a repeating 4-step pattern. */
+  .pop-grid > li:nth-child(4n + 1) .pop-card {
+    transform: rotate(-2.5deg);
+  }
+  .pop-grid > li:nth-child(4n + 2) .pop-card {
+    transform: rotate(1.8deg);
+  }
+  .pop-grid > li:nth-child(4n + 3) .pop-card {
+    transform: rotate(-1deg);
+  }
+  .pop-grid > li:nth-child(4n + 4) .pop-card {
+    transform: rotate(2.6deg);
+  }
+
+  .pop-card {
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  /* !important so hover beats the nth-child tilt rules above, which are more specific. */
+  .pop-card:hover {
+    transform: rotate(0deg) translate(-3px, -3px) !important;
+    box-shadow: 12px 12px 0 var(--color-ink) !important;
+  }
+  /* Declared after hover so a press wins; the card is a button, so it gets the same push-in feel as .pop-btn. */
+  .pop-card:active {
+    transform: translate(2px, 2px) !important;
+    box-shadow: none !important;
+  }
+
+  .pop-btn {
+    transition:
+      transform 0.1s ease,
+      box-shadow 0.1s ease;
+  }
+  .pop-btn:hover:not(:disabled) {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--color-ink) !important;
+  }
+  .pop-btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--color-ink) !important;
+  }
+  .pop-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .pop-card:focus-visible,
+  .pop-btn:focus-visible,
+  .pop-field:focus-visible {
+    outline: 4px solid var(--color-zap);
+    outline-offset: 3px;
+  }
+
+  /* Dims the page behind the native modal <dialog> (it can't be styled with utility classes). */
+  .pop-dialog::backdrop {
+    background: rgb(17 17 17 / 0.55);
+  }
+
+  /* Halftone dot pattern for the decorative header circle. */
+  .pop-dots {
+    background-image: radial-gradient(var(--color-ink) 1.4px, transparent 1.6px);
+    background-size: 14px 14px;
+  }
+
+  /* Flip: both faces share one grid cell, so the card is as tall as its taller face. */
+  .flip-inner {
+    display: grid;
+    transform-style: preserve-3d;
+    transition: transform 0.5s;
+  }
+  .flip-face {
+    grid-area: 1 / 1;
+    backface-visibility: hidden;
+  }
+  .flip-back {
+    transform: rotateY(180deg);
+  }
+  .is-flipped .flip-inner {
+    transform: rotateY(180deg);
+  }
+
+  /* Same layer, declared last: it wins over the earlier rules (including the !important hover). */
+  @media (prefers-reduced-motion: reduce) {
+    .pop-card,
+    .pop-btn,
+    .flip-inner {
+      transition: none;
+    }
+    .pop-card:hover,
+    .pop-card:active {
+      transform: none !important;
+    }
+    .pop-btn:hover:not(:disabled),
+    .pop-btn:active:not(:disabled) {
+      transform: none;
+    }
+  }
+}

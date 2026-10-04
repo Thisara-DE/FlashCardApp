@@ -7,8 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     // Forward API calls to the Express server so the browser sees one origin.
+    // e2e overrides the target (API_PROXY_TARGET) to reach its own test server.
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:3001',
     },
   },
   test: {
