@@ -5,15 +5,17 @@ import { ApiError } from './api/cards.js';
 import CardForm from './components/CardForm.jsx';
 import CardGrid from './components/CardGrid.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
+import DeletePileDialog from './components/DeletePileDialog.jsx';
 import NoPilesState from './components/NoPilesState.jsx';
 import PileHeader from './components/PileHeader.jsx';
 import PileTabs from './components/PileTabs.jsx';
 import { useCards, useCreateCard, useDeleteCard, useUpdateCard } from './hooks/useCards.js';
-import { useCreatePile, usePiles, useRenamePile } from './hooks/usePiles.js';
+import { useCreatePile, useDeletePile, usePiles, useRenamePile } from './hooks/usePiles.js';
 import { useSelectedPile } from './hooks/useSelectedPile.js';
 import { CARDS_KEY, PILES_KEY } from './hooks/useSyncedMutation.js';
 
 const DELETE_ERROR = "Couldn't toss this card. Try again.";
+const PILE_DELETE_ERROR = "Couldn't delete this pile. Try again.";
 const PILE_TIP = 'Tip: press and hold a card to select it, then drag it onto another pile.';
 
 // The paper panel under the tabs, and the boxes shown while the piles load.
@@ -96,6 +98,7 @@ function App() {
 
   const createPile = useCreatePile();
   const renamePile = useRenamePile();
+  const deletePile = useDeletePile();
   const createCard = useCreateCard();
   const updateCard = useUpdateCard();
   const deleteCard = useDeleteCard();
@@ -107,6 +110,11 @@ function App() {
   // The card waiting for delete confirmation (null = dialog closed).
   const [cardToDelete, setCardToDelete] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+
+  // The pile waiting for delete confirmation: { id, name, cardCount }, or null when no dialog is open.
+  // An empty pile gets the simple confirm; a pile with cards asks what to do with them.
+  const [pileToDelete, setPileToDelete] = useState(null);
+  const [pileDeleteError, setPileDeleteError] = useState(null);
 
   const piles = pilesData?.piles ?? [];
   const isUnsorted = selectedKey === 'unsorted';
@@ -189,6 +197,44 @@ function App() {
     }
   }
 
+  function handleRequestDeletePile() {
+    const { id, name, cardCount } = selectedPile;
+    setPileDeleteError(null);
+    setPileToDelete({ id, name, cardCount });
+  }
+
+  // Esc, "Keep it" and "Cancel" all land here; closing mid-request would hide the outcome.
+  function handleCancelDeletePile() {
+    if (deletePile.isPending) return;
+    setPileToDelete(null);
+  }
+
+  // cardsMode: undefined for an empty pile, 'keep' or 'delete' for a pile with cards.
+  async function handleConfirmDeletePile(cardsMode) {
+    const { id } = pileToDelete;
+    // Clear the old error first so a repeated failure re-renders (and re-announces) the alert.
+    setPileDeleteError(null);
+    try {
+      await deletePile.mutateAsync({ id, cardsMode });
+      setPileToDelete(null);
+      // Open the first pile that is left, so the deleted pile is not the remembered choice.
+      const firstPileLeft = piles.find((pile) => pile.id !== id);
+      if (firstPileLeft) setSelectedKey(firstPileLeft.id);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'PILE_NOT_EMPTY' && error.details.cardCount > 0) {
+        // Cards were added elsewhere since the counts loaded. That is not an error: ask what to do
+        // with them, using the server's count (a count above 0 switches to the keep/delete dialog).
+        setPileToDelete((pile) => ({ ...pile, cardCount: error.details.cardCount }));
+      } else if (error instanceof ApiError && error.status === 404) {
+        // Already deleted elsewhere: there is nothing to retry, so close and resync.
+        setPileToDelete(null);
+        refetchCardsAndPiles();
+      } else {
+        setPileDeleteError(PILE_DELETE_ERROR);
+      }
+    }
+  }
+
   // The selected pile (or Unsorted): its header, the new-card form and its cards.
   function renderPilePanel() {
     const name = isUnsorted ? 'Unsorted' : selectedPile.name;
@@ -207,6 +253,7 @@ function App() {
             headingId={panelHeadingId}
             existingPiles={piles}
             onRename={handleRenamePile}
+            onRequestDelete={handleRequestDeletePile}
             newCardOpen={newCardOpen}
             onToggleNewCard={() => setNewCardOpen((open) => !open)}
             newCardButtonRef={newCardButtonRef}
@@ -309,6 +356,29 @@ function App() {
         onCancel={handleCancelDelete}
         pending={deleteCard.isPending}
         error={deleteError}
+      />
+
+      <ConfirmDialog
+        open={pileToDelete !== null && pileToDelete.cardCount === 0}
+        title={pileToDelete ? `Delete the ${pileToDelete.name} pile?` : ''}
+        message="It has no cards, so nothing else is lost."
+        confirmLabel="Delete pile"
+        cancelLabel="Keep it"
+        onConfirm={() => handleConfirmDeletePile(undefined)}
+        onCancel={handleCancelDeletePile}
+        pending={deletePile.isPending}
+        error={pileDeleteError}
+      />
+
+      <DeletePileDialog
+        open={pileToDelete !== null && pileToDelete.cardCount > 0}
+        pileName={pileToDelete?.name ?? ''}
+        cardCount={pileToDelete?.cardCount ?? 0}
+        onKeep={() => handleConfirmDeletePile('keep')}
+        onDeleteCards={() => handleConfirmDeletePile('delete')}
+        onCancel={handleCancelDeletePile}
+        pending={deletePile.isPending}
+        error={pileDeleteError}
       />
     </div>
   );

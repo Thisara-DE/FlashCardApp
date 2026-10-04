@@ -449,6 +449,239 @@ describe('App', () => {
     });
   });
 
+  describe('deleting a pile', () => {
+    const PILE_DELETE_ERROR = "Couldn't delete this pile. Try again.";
+    // The usual fixture plus an empty third pile, Bio (id 3).
+    const WITH_EMPTY_BIO = { piles: [...PILES, { id: 3, name: 'Bio' }], cards: FIXTURE.cards };
+
+    // The pile panel's "Delete pile" button (the empty-pile confirm dialog has one with the same name).
+    async function openDeletePile(user) {
+      await user.click(within(screen.getByRole('region')).getByRole('button', { name: 'Delete pile' }));
+    }
+
+    it('deleting an empty pile uses the simple confirm and falls back to the first pile', async () => {
+      localStorage.setItem(STORAGE_KEY, '3');
+      const { fetchMock, user } = renderApp(WITH_EMPTY_BIO);
+      await screen.findByText('No cards in Bio yet — make your first one!');
+
+      await openDeletePile(user);
+      const dialog = screen.getByRole('dialog', { name: 'Delete the Bio pile?' });
+      expect(within(dialog).getByText('It has no cards, so nothing else is lost.')).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Keep it' })).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: 'Delete pile' }));
+
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Bio · 0' })).not.toBeInTheDocument());
+      expect(requestsMade(fetchMock)).toContain('DELETE /api/piles/3');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Geography · 2' })).toHaveAttribute('aria-pressed', 'true');
+      expect(await screen.findByText(australia.question)).toBeInTheDocument();
+    });
+
+    it('Keep it closes the simple confirm without deleting', async () => {
+      localStorage.setItem(STORAGE_KEY, '3');
+      const { fetchMock, user } = renderApp(WITH_EMPTY_BIO);
+      await screen.findByText('No cards in Bio yet — make your first one!');
+
+      await openDeletePile(user);
+      await user.click(screen.getByRole('button', { name: 'Keep it' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Bio · 0' })).toBeInTheDocument();
+      expect(requestsMade(fetchMock).some((made) => made.startsWith('DELETE'))).toBe(false);
+    });
+
+    it('Keep the cards sends ?cards=keep, shows the Unsorted tab, and moves selection to the first pile', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      const { fetchMock, user } = renderApp();
+      await screen.findByText(squareRoot.question);
+
+      await openDeletePile(user);
+      const dialog = screen.getByRole('dialog', { name: 'Delete the Math pile?' });
+      expect(within(dialog).getByText('It still has 1 card. What should happen to them?')).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: /^Keep the cards/ }));
+
+      expect(await screen.findByRole('button', { name: 'Unsorted · 1' })).toHaveAttribute('aria-pressed', 'false');
+      expect(requestsMade(fetchMock)).toContain('DELETE /api/piles/2?cards=keep');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Math · / })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Geography · 2' })).toHaveAttribute('aria-pressed', 'true');
+      expect(await screen.findByText(australia.question)).toBeInTheDocument();
+      expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
+    });
+
+    it('Delete the cards too sends ?cards=delete and no Unsorted tab appears', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      const { fetchMock, user } = renderApp();
+      await screen.findByText(squareRoot.question);
+
+      await openDeletePile(user);
+      const dialog = screen.getByRole('dialog', { name: 'Delete the Math pile?' });
+      expect(within(dialog).getByText('That card is gone for good. No take-backs.')).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: /^Delete the cards too/ }));
+
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Math · / })).not.toBeInTheDocument());
+      expect(requestsMade(fetchMock)).toContain('DELETE /api/piles/2?cards=delete');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Unsorted/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Geography · 2' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('Cancel closes the keep/delete dialog without deleting', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      const { fetchMock, user } = renderApp();
+      await screen.findByText(squareRoot.question);
+
+      await openDeletePile(user);
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Math · 1' })).toBeInTheDocument();
+      expect(requestsMade(fetchMock).some((made) => made.startsWith('DELETE'))).toBe(false);
+    });
+
+    it('a pile the client thinks is empty but the server says has cards opens the keep/delete dialog', async () => {
+      let deleteCount = 0;
+      localStorage.setItem(STORAGE_KEY, '2');
+      // Math has no cards here, so the client asks for a plain delete; the server says it has 4.
+      const { fetchMock, user } = renderApp(
+        { piles: PILES, cards: [france, australia] },
+        {
+          'DELETE /api/piles/2': (url, options, handleNormally) => {
+            deleteCount += 1;
+            return deleteCount === 1
+              ? respondError(409, 'PILE_NOT_EMPTY', 'Pile still has cards', { cardCount: 4 })
+              : handleNormally();
+          },
+        },
+      );
+      await screen.findByText('No cards in Math yet — make your first one!');
+
+      await openDeletePile(user);
+      await user.click(
+        within(screen.getByRole('dialog', { name: 'Delete the Math pile?' })).getByRole('button', {
+          name: 'Delete pile',
+        }),
+      );
+
+      const dialog = await screen.findByRole('dialog', { name: 'Delete the Math pile?' });
+      expect(await within(dialog).findByText('It still has 4 cards. What should happen to them?')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(requestsMade(fetchMock)).toContain('DELETE /api/piles/2');
+
+      await user.click(within(dialog).getByRole('button', { name: /^Keep the cards/ }));
+      await waitFor(() => expect(requestsMade(fetchMock)).toContain('DELETE /api/piles/2?cards=keep'));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    });
+
+    it('a failed delete keeps the dialog open with "Couldn\'t delete this pile. Try again."', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      const { user } = renderApp(FIXTURE, { 'DELETE /api/piles/2': serverError });
+      await screen.findByText(squareRoot.question);
+
+      await openDeletePile(user);
+      await user.click(screen.getByRole('button', { name: /^Keep the cards/ }));
+
+      const dialog = screen.getByRole('dialog', { name: 'Delete the Math pile?' });
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(PILE_DELETE_ERROR);
+      expect(screen.getByRole('button', { name: 'Math · 1' })).toBeInTheDocument();
+    });
+
+    it('a failed empty-pile delete keeps the confirm open with the error', async () => {
+      localStorage.setItem(STORAGE_KEY, '3');
+      const { user } = renderApp(WITH_EMPTY_BIO, { 'DELETE /api/piles/3': serverError });
+      await screen.findByText('No cards in Bio yet — make your first one!');
+
+      await openDeletePile(user);
+      const dialog = screen.getByRole('dialog', { name: 'Delete the Bio pile?' });
+      await user.click(within(dialog).getByRole('button', { name: 'Delete pile' }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent(PILE_DELETE_ERROR);
+    });
+
+    it('clears a previous pile delete error when the dialog is reopened', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      const { user } = renderApp(FIXTURE, { 'DELETE /api/piles/2': serverError });
+      await screen.findByText(squareRoot.question);
+
+      await openDeletePile(user);
+      await user.click(screen.getByRole('button', { name: /^Keep the cards/ }));
+      await screen.findByRole('alert');
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await openDeletePile(user);
+
+      expect(screen.getByRole('dialog', { name: 'Delete the Math pile?' })).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('a 404 on delete closes the dialog and refetches piles', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      const { fetchMock, user } = renderApp(FIXTURE, {
+        'DELETE /api/piles/2': () => respondError(404, 'NOT_FOUND', 'Pile not found'),
+      });
+      await screen.findByText(squareRoot.question);
+      const pileLoadsBefore = countRequests(fetchMock, 'GET /api/piles');
+
+      await openDeletePile(user);
+      await user.click(screen.getByRole('button', { name: /^Delete the cards too/ }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(countRequests(fetchMock, 'GET /api/piles')).toBeGreaterThan(pileLoadsBefore));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('ignores Esc while the pile delete is still in flight', async () => {
+      localStorage.setItem(STORAGE_KEY, '2');
+      // A DELETE that never settles keeps the mutation pending for the whole test.
+      const { user } = renderApp(FIXTURE, { 'DELETE /api/piles/2': () => new Promise(() => {}) });
+      await screen.findByText(squareRoot.question);
+
+      await openDeletePile(user);
+      await user.click(screen.getByRole('button', { name: /^Keep the cards/ }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled());
+
+      fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
+
+      expect(screen.getByRole('dialog', { name: 'Delete the Math pile?' })).toBeInTheDocument();
+    });
+  });
+
+  describe('the Unsorted view', () => {
+    const orphan = { id: 31, question: 'Who wrote Hamlet?', answer: 'Shakespeare', pileId: null };
+
+    it('the Unsorted tab shows unsorted cards with the Unsorted header and no New card button', async () => {
+      const { user } = renderApp({ piles: PILES, cards: [...FIXTURE.cards, orphan] });
+      await screen.findByText(australia.question);
+
+      // The Unsorted tab comes after every pile tab.
+      const tabs = screen.getByRole('navigation', { name: 'Piles' });
+      // Tabs are the nav buttons with aria-pressed ("+ New pile" has none).
+      const tabNames = within(tabs)
+        .getAllByRole('button')
+        .filter((button) => button.hasAttribute('aria-pressed'))
+        .map((tab) => tab.textContent);
+      expect(tabNames).toEqual(['Geography · 2', 'Math · 1', 'Unsorted · 1']);
+
+      await user.click(within(tabs).getByRole('button', { name: 'Unsorted · 1' }));
+
+      expect(await screen.findByText(orphan.question)).toBeInTheDocument();
+      expect(screen.queryByText(australia.question)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: 'Unsorted' })).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'These cards lost their pile. Press and hold a card to select it, then drag it onto a pile.',
+        ),
+      ).toBeInTheDocument();
+      expect(getBadge()).toHaveTextContent(/^1 unsorted card$/);
+      expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Delete pile' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^New .* card$/ })).not.toBeInTheDocument();
+
+      const card = screen.getByText(orphan.question).closest('li');
+      expect(within(card).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Toss' })).toBeInTheDocument();
+    });
+  });
+
   describe('loading the cards', () => {
     it('shows the error panel with Retry when the first load fails', async () => {
       renderApp(FIXTURE, { 'GET /api/cards': serverError });
