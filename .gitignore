@@ -1,0 +1,2 @@
+# Local-only agent pointer (contains local vault paths; synced via Dropbox, not Git)
+AGENTS.md
