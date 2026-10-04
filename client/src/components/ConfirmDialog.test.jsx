@@ -106,4 +106,37 @@ describe('ConfirmDialog', () => {
     renderDialog();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  describe('when the browser closes the native dialog', () => {
+    // Chrome can't cancel a second Esc without user activation, so the dialog closes
+    // natively even though we ignored the cancel. dialog.close() stands in for that here.
+    it('reopens it while the parent still says open', () => {
+      renderDialog();
+      const dialog = screen.getByRole('dialog', { name: TITLE });
+
+      dialog.close();
+
+      expect(dialog).toHaveAttribute('open');
+    });
+
+    it('stays closed when the parent closed it by setting open to false', () => {
+      const props = dialogProps();
+      const { rerender } = render(<ConfirmDialog {...props} />);
+      const dialog = screen.getByRole('dialog', { name: TITLE });
+
+      rerender(<ConfirmDialog {...props} open={false} />);
+
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('can still be opened again after the parent closed it', () => {
+      const props = dialogProps();
+      const { rerender } = render(<ConfirmDialog {...props} />);
+
+      rerender(<ConfirmDialog {...props} open={false} />);
+      rerender(<ConfirmDialog {...props} open />);
+
+      expect(screen.getByRole('dialog', { name: TITLE })).toHaveAttribute('open');
+    });
+  });
 });

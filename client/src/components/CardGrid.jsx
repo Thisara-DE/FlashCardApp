@@ -5,7 +5,15 @@ import FlashCard from './FlashCard.jsx';
 // Same white bordered panel look as the create form.
 const PANEL = 'border-4 border-ink bg-white p-7 shadow-[10px_10px_0_var(--color-ink)]';
 
-export default function CardGrid({ cards, isLoading, isError, onRetry, onSaveCard, onRequestDelete }) {
+export default function CardGrid({
+  cards,
+  isLoading,
+  isError,
+  isFetching = false,
+  onRetry,
+  onSaveCard,
+  onRequestDelete,
+}) {
   const headingId = useId();
 
   function renderBody() {
@@ -23,11 +31,18 @@ export default function CardGrid({ cards, isLoading, isError, onRetry, onSaveCar
           <p className="text-xl font-bold">Couldn't load cards</p>
           <button
             type="button"
+            disabled={isFetching}
             onClick={onRetry}
-            className="pop-btn min-h-11 cursor-pointer border-4 border-ink bg-pop px-4 py-2 font-display text-[22px] uppercase text-ink shadow-[4px_4px_0_var(--color-ink)]"
+            className="pop-btn min-h-11 cursor-pointer border-4 border-ink bg-white px-4 py-2 font-bold shadow-[4px_4px_0_var(--color-ink)]"
           >
             Retry
           </button>
+          {/* Without this the click seems to do nothing while the request is in flight. */}
+          {isFetching && (
+            <p role="status" className="font-bold">
+              Loading cards…
+            </p>
+          )}
         </div>
       );
     }
@@ -76,6 +91,8 @@ CardGrid.propTypes = {
   ),
   isLoading: PropTypes.bool.isRequired,
   isError: PropTypes.bool.isRequired,
+  // True while a (re)fetch is running; disables Retry so it cannot be spammed.
+  isFetching: PropTypes.bool,
   onRetry: PropTypes.func.isRequired,
   onSaveCard: PropTypes.func.isRequired,
   onRequestDelete: PropTypes.func.isRequired,

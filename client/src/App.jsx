@@ -36,6 +36,8 @@ function App() {
   }
 
   async function handleConfirmDelete() {
+    // Clear the old error first so a repeated failure re-renders (and re-announces) the alert.
+    setDeleteError(null);
     try {
       await deleteCard.mutateAsync(cardToDelete.id);
       setCardToDelete(null);
@@ -94,7 +96,8 @@ function App() {
               cards={cards}
               isLoading={cardsQuery.isLoading}
               isError={showLoadError}
-              onRetry={cardsQuery.refetch}
+              isFetching={cardsQuery.isFetching}
+              onRetry={() => cardsQuery.refetch()}
               onSaveCard={(id, values) => updateCard.mutateAsync({ id, ...values })}
               onRequestDelete={handleRequestDelete}
             />

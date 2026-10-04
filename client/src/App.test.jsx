@@ -28,12 +28,19 @@ function stubApi(initialCards, overrides = {}) {
       cards.unshift(created);
       return respond(201, created);
     }
+    if (method === 'PUT') {
+      const id = Number(url.split('/').pop());
+      const index = cards.findIndex((card) => card.id === id);
+      if (index === -1) return respond(404, { error: { code: 'NOT_FOUND', message: 'Card not found' } });
+      cards[index] = { id, ...JSON.parse(options.body) };
+      return respond(200, cards[index]);
+    }
     if (method === 'DELETE') {
       const id = Number(url.split('/').pop());
-      cards.splice(
-        cards.findIndex((card) => card.id === id),
-        1,
-      );
+      const index = cards.findIndex((card) => card.id === id);
+      // splice(-1, 1) would delete the LAST card, so an unknown id must never reach it.
+      if (index === -1) return respond(404, { error: { code: 'NOT_FOUND', message: 'Card not found' } });
+      cards.splice(index, 1);
       return respond(204, null);
     }
     throw new Error(`Unexpected request: ${method} ${url}`);
@@ -107,6 +114,29 @@ describe('App', () => {
       expect(items[0]).toHaveTextContent('Capital of Japan?');
       expect(within(form).getByLabelText(/question/i)).toHaveValue('');
       expect(within(form).getByLabelText(/answer/i)).toHaveValue('');
+    });
+  });
+
+  describe('editing a card', () => {
+    it('PUTs only question and answer, then shows the new text after the refetch', async () => {
+      const fetchMock = stubApi([australia, france]);
+      const user = userEvent.setup();
+      renderWithClient(<App />);
+      await screen.findByText(france.question);
+
+      const item = screen.getByText(france.question).closest('li');
+      await user.click(within(item).getByRole('button', { name: 'Edit' }));
+      const answerField = within(item).getByLabelText(/answer/i);
+      await user.clear(answerField);
+      await user.type(answerField, 'Lyon');
+      await user.click(within(item).getByRole('button', { name: 'Save' }));
+
+      // The answer sits on the (hidden) back face, so look it up by text, not by button name.
+      expect(await screen.findByText('Lyon')).toBeInTheDocument();
+      const put = fetchMock.mock.calls.find(([, options]) => options?.method === 'PUT');
+      expect(put[0]).toBe('/api/cards/2');
+      expect(JSON.parse(put[1].body)).toEqual({ question: 'Capital of France?', answer: 'Lyon' });
+      expect(screen.queryByRole('form', { name: 'Fix this card' })).not.toBeInTheDocument();
     });
   });
 
@@ -205,6 +235,59 @@ describe('App', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
+    it('clears the old error while retrying and shows it again if the retry fails', async () => {
+      let deleteCount = 0;
+      let failRetry;
+      stubApi([australia, france], {
+        DELETE: () => {
+          deleteCount += 1;
+          if (deleteCount === 1) return respond(500, { error: { code: 'INTERNAL_ERROR', message: 'Boom' } });
+          // The second attempt stays pending until the test settles it.
+          return new Promise((resolve) => {
+            failRetry = () => resolve(respond(500, { error: { code: 'INTERNAL_ERROR', message: 'Boom' } }));
+          });
+        },
+      });
+      const user = userEvent.setup();
+      renderWithClient(<App />);
+      await screen.findByText(france.question);
+
+      await tossCard(user, france.question);
+      await user.click(screen.getByRole('button', { name: 'Toss it' }));
+      await screen.findByRole('alert');
+
+      await user.click(screen.getByRole('button', { name: 'Toss it' }));
+      await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+
+      failRetry();
+      expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't toss this card. Try again.");
+    });
+
+    it('closes the dialog and removes the card when a retry succeeds', async () => {
+      let deleteCount = 0;
+      const fetchMock = stubApi([australia, france]);
+      const workingApi = fetchMock.getMockImplementation();
+      // First DELETE fails, every other request behaves like the normal stub.
+      fetchMock.mockImplementation(async (url, options = {}) => {
+        if (options.method === 'DELETE') {
+          deleteCount += 1;
+          if (deleteCount === 1) return respond(500, { error: { code: 'INTERNAL_ERROR', message: 'Boom' } });
+        }
+        return workingApi(url, options);
+      });
+      const user = userEvent.setup();
+      renderWithClient(<App />);
+      await screen.findByText(france.question);
+
+      await tossCard(user, france.question);
+      await user.click(screen.getByRole('button', { name: 'Toss it' }));
+      await screen.findByRole('alert');
+      await user.click(screen.getByRole('button', { name: 'Toss it' }));
+
+      await waitFor(() => expect(screen.queryByText(france.question)).not.toBeInTheDocument());
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
     it('ignores Esc while the delete is still in flight', async () => {
       // A DELETE that never settles keeps the mutation pending for the whole test.
       stubApi([australia, france], { DELETE: () => new Promise(() => {}) });
@@ -230,6 +313,33 @@ describe('App', () => {
       expect(await screen.findByText("Couldn't load cards")).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
       expect(screen.queryByText(/in the pile/i)).not.toBeInTheDocument();
+    });
+
+    it('Retry reloads the list and shows the loading status meanwhile', async () => {
+      let getCount = 0;
+      let finishRetry;
+      stubApi([], {
+        GET: () => {
+          getCount += 1;
+          if (getCount === 1) return respond(500, { error: { code: 'INTERNAL_ERROR', message: 'Boom' } });
+          return new Promise((resolve) => {
+            finishRetry = () => resolve(respond(200, [australia]));
+          });
+        },
+      });
+      const user = userEvent.setup();
+      renderWithClient(<App />);
+      await screen.findByText("Couldn't load cards");
+
+      await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+      // With no cached cards React Query goes back to its loading state, so the error panel is replaced.
+      expect(await screen.findByRole('status')).toHaveTextContent('Loading cards…');
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+
+      finishRetry();
+      expect(await screen.findByText(australia.question)).toBeInTheDocument();
+      expect(screen.queryByText("Couldn't load cards")).not.toBeInTheDocument();
     });
 
     it('keeps showing the cards when a background refetch fails', async () => {

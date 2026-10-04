@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 
 const BUTTON_BASE =
@@ -17,6 +17,13 @@ export default function ConfirmDialog({
 }) {
   const dialogRef = useRef(null);
   const titleId = useId();
+  // Latest value of `open` for the native close handler, which must not see a stale prop.
+  const openRef = useRef(open);
+  // A layout effect runs before the [open] effect cleanup below, so the cleanup's own
+  // dialog.close() already sees open=false and is not mistaken for a browser-initiated close.
+  useLayoutEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   // The parent owns `open`; we sync it to the native dialog, which gives us the backdrop,
   // focus trapping and inert page content for free.
@@ -40,11 +47,19 @@ export default function ConfirmDialog({
     onCancel();
   }
 
+  // The browser can still close the dialog itself (Chrome ignores preventDefault on a second Esc
+  // without user activation). If the parent still wants it open, re-sync by opening it again.
+  function handleClose() {
+    const dialog = dialogRef.current;
+    if (openRef.current && !dialog.open) dialog.showModal();
+  }
+
   return (
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
       onCancel={handleCancel}
+      onClose={handleClose}
       className="pop-dialog m-auto w-[min(92vw,440px)] -rotate-[1.5deg] border-[5px] border-ink bg-white p-0 text-ink shadow-[14px_14px_0_var(--color-pop)]"
     >
       {/* Layout lives on this inner div: a display class on <dialog> itself would show it while closed. */}

@@ -121,4 +121,61 @@ describe('FlashCard', () => {
     expect(questionFace()).toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
+
+  describe('keyboard focus', () => {
+    it('moves focus to the Question field when the edit form opens', async () => {
+      const { user } = renderCard();
+
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+      expect(screen.getByLabelText(/question/i)).toHaveFocus();
+    });
+
+    it('returns focus to the Edit button after Cancel', async () => {
+      const { user } = renderCard();
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus();
+    });
+
+    it('returns focus to the Edit button after a successful Save', async () => {
+      const { user } = renderCard();
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus());
+    });
+
+    it('keeps focus in the form when the save fails', async () => {
+      const onSave = vi.fn().mockRejectedValue(new Error('boom'));
+      const { user } = renderCard({ onSave });
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await screen.findByRole('alert');
+
+      expect(screen.getByRole('form', { name: 'Fix this card' })).toContainElement(document.activeElement);
+    });
+  });
+
+  describe('text and styling', () => {
+    it('keeps line breaks in the question and the answer', () => {
+      renderCard();
+
+      expect(screen.getByText(card.question)).toHaveClass('whitespace-pre-wrap', 'break-words');
+      expect(screen.getByText(card.answer)).toHaveClass('whitespace-pre-wrap', 'break-words');
+    });
+
+    it('gives each action button exactly one shadow utility', () => {
+      renderCard();
+
+      for (const name of ['Edit', 'Toss']) {
+        const shadows = screen.getByRole('button', { name }).className.match(/shadow-\[/g);
+        expect(shadows).toHaveLength(1);
+      }
+    });
+  });
 });

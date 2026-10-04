@@ -14,7 +14,7 @@ const BUTTON_BASE =
   'pop-btn min-h-11 cursor-pointer border-4 border-ink px-4 py-2 shadow-[4px_4px_0_var(--color-ink)]';
 
 // One labelled textarea with a live counter and an optional error message.
-function Field({ label, value, error, onChange }) {
+function Field({ label, value, error, onChange, autoFocus = false }) {
   const id = useId();
   const errorId = `${id}-error`;
 
@@ -28,6 +28,7 @@ function Field({ label, value, error, onChange }) {
       </label>
       <textarea
         id={id}
+        autoFocus={autoFocus}
         className="pop-field resize-y border-[3px] border-ink bg-paper p-3 text-[17px]"
         rows={3}
         maxLength={MAX_LENGTH}
@@ -50,6 +51,7 @@ Field.propTypes = {
   value: PropTypes.string.isRequired,
   error: PropTypes.string,
   onChange: PropTypes.func.isRequired,
+  autoFocus: PropTypes.bool,
 };
 
 export default function CardForm({
@@ -60,6 +62,7 @@ export default function CardForm({
   onCancel,
   variant,
   resetOnSuccess = false,
+  autoFocus = false,
 }) {
   const titleId = useId();
   const [question, setQuestion] = useState(initialValues.question);
@@ -109,7 +112,13 @@ export default function CardForm({
       <h2 id={titleId} className="font-display text-[28px] uppercase">
         {title}
       </h2>
-      <Field label="Question" value={question} error={errors.question} onChange={setQuestion} />
+      <Field
+        label="Question"
+        value={question}
+        error={errors.question}
+        onChange={setQuestion}
+        autoFocus={autoFocus}
+      />
       <Field label="Answer" value={answer} error={errors.answer} onChange={setAnswer} />
       {formError && (
         <p role="alert" className="border-[3px] border-ink bg-white p-3 font-bold">
@@ -145,4 +154,6 @@ CardForm.propTypes = {
   onCancel: PropTypes.func,
   variant: PropTypes.oneOf(['create', 'edit']).isRequired,
   resetOnSuccess: PropTypes.bool,
+  // Focus the Question field on mount (used by the inline edit form, not the create form).
+  autoFocus: PropTypes.bool,
 };

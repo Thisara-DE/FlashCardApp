@@ -12,7 +12,7 @@ function renderGrid(props = {}) {
     onSaveCard: vi.fn().mockResolvedValue(undefined),
     onRequestDelete: vi.fn(),
   };
-  const allProps = { cards: [], isLoading: false, isError: false, ...handlers, ...props };
+  const allProps = { cards: [], isLoading: false, isError: false, isFetching: false, ...handlers, ...props };
   const view = render(<CardGrid {...allProps} />);
   return { ...handlers, ...view, props: allProps, user: userEvent.setup() };
 }
@@ -38,6 +38,28 @@ describe('CardGrid', () => {
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('styles Retry as a white button, not the pink primary one', () => {
+    renderGrid({ cards: undefined, isError: true });
+
+    const retry = screen.getByRole('button', { name: 'Retry' });
+    expect(retry).toHaveClass('bg-white', 'font-bold');
+    expect(retry).not.toHaveClass('bg-pop');
+  });
+
+  it('disables Retry and shows a loading status while a retry is in flight', () => {
+    renderGrid({ cards: undefined, isError: true, isFetching: true });
+
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading cards…');
+  });
+
+  it('keeps Retry enabled and shows no status when nothing is fetching', () => {
+    renderGrid({ cards: undefined, isError: true });
+
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('shows the empty message when there are no cards', () => {
