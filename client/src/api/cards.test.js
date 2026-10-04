@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, createCard, deleteCard, listCards, updateCard } from './cards.js';
+import { ApiError, createCard, deleteCard, listCards, moveCards, updateCard } from './cards.js';
 
 // Build a minimal fake fetch Response.
 function respond(status, body) {
@@ -23,17 +23,30 @@ describe('cards API', () => {
     expect(fetch).toHaveBeenCalledWith('/api/cards', expect.anything());
   });
 
-  it('createCard() POSTs the card as JSON', async () => {
-    const created = { id: 2, question: 'Q', answer: 'A' };
+  it('createCard() POSTs the card, including its pile, as JSON', async () => {
+    const created = { id: 2, question: 'Q', answer: 'A', pileId: 3 };
     fetch.mockResolvedValue(respond(201, created));
 
-    await expect(createCard({ question: 'Q', answer: 'A' })).resolves.toEqual(created);
+    await expect(createCard({ question: 'Q', answer: 'A', pileId: 3 })).resolves.toEqual(created);
     expect(fetch).toHaveBeenCalledWith(
       '/api/cards',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ question: 'Q', answer: 'A' }),
+        body: JSON.stringify({ question: 'Q', answer: 'A', pileId: 3 }),
+      }),
+    );
+  });
+
+  it('moveCards() POSTs the card ids and target pile to /api/cards/move', async () => {
+    fetch.mockResolvedValue(respond(200, { movedCount: 2 }));
+
+    await expect(moveCards({ cardIds: [1, 2], pileId: 3 })).resolves.toEqual({ movedCount: 2 });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/cards/move',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ cardIds: [1, 2], pileId: 3 }),
       }),
     );
   });

@@ -1,31 +1,27 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createCard, deleteCard, listCards, updateCard } from '../api/cards.js';
-
-const CARDS_KEY = ['cards'];
+import { useQuery } from '@tanstack/react-query';
+import { createCard, deleteCard, listCards, moveCards, updateCard } from '../api/cards.js';
+import { CARDS_KEY, useSyncedMutation } from './useSyncedMutation.js';
 
 export function useCards() {
   return useQuery({ queryKey: CARDS_KEY, queryFn: listCards });
 }
 
-// Each mutation refetches the list on success so the UI always matches the server.
-function useCardMutation(mutationFn) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CARDS_KEY }),
-  });
-}
-
+// Variables: { question, answer, pileId }
 export function useCreateCard() {
-  return useCardMutation(createCard);
+  return useSyncedMutation(createCard);
 }
 
 // Variables: { id, question, answer }
 export function useUpdateCard() {
-  return useCardMutation(({ id, question, answer }) => updateCard(id, { question, answer }));
+  return useSyncedMutation(({ id, question, answer }) => updateCard(id, { question, answer }));
 }
 
 // Variables: the card id
 export function useDeleteCard() {
-  return useCardMutation(deleteCard);
+  return useSyncedMutation(deleteCard);
+}
+
+// Variables: { cardIds, pileId }
+export function useMoveCards() {
+  return useSyncedMutation(moveCards);
 }
