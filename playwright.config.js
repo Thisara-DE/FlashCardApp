@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// e2e gets its own ports (not the dev ports 3001/5173) so it can never reuse a running
+// `npm run dev` and write test cards into the real flashcards.db.
+const API_PORT = 3101;
+const WEB_PORT = 5174;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -7,25 +12,28 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Start server + client before the tests. If a dev server is already running,
-  // Playwright reuses it (and its real database), so the tests always create their
-  // own uniquely named cards and clean up after themselves.
+  // Start our own server + client for the tests and never reuse one that is already running
+  // (reuse could silently point the tests at a dev server and its real database). Each run
+  // starts fresh; the tests create their own uniquely named cards and clean up after themselves.
   webServer: [
     {
       command: 'npm run start -w server',
-      url: 'http://localhost:3001/api/ping',
+      url: `http://localhost:${API_PORT}/api/ping`,
       // NODE_ENV=test makes the server use a throwaway in-memory database.
-      env: { NODE_ENV: 'test' },
-      reuseExistingServer: !process.env.CI,
+      env: { NODE_ENV: 'test', PORT: String(API_PORT) },
+      reuseExistingServer: false,
     },
     {
-      command: 'npm run dev -w client',
-      url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      // --strictPort fails loudly instead of quietly moving to another port.
+      command: `npm run dev -w client -- --port ${WEB_PORT} --strictPort`,
+      url: `http://localhost:${WEB_PORT}`,
+      // Point Vite's /api proxy at the e2e server instead of the dev server.
+      env: { API_PROXY_TARGET: `http://localhost:${API_PORT}` },
+      reuseExistingServer: false,
     },
   ],
 });
