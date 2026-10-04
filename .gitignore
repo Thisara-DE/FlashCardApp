@@ -1,2 +1,9 @@
 # Local-only agent pointer (contains local vault paths; synced via Dropbox, not Git)
 AGENTS.md
+
+node_modules/
+dist/
+playwright-report/
+test-results/
+*.db
+.env
