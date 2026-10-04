@@ -28,6 +28,9 @@ test('create, flip, edit and delete a card', async ({ page }) => {
   const editForm = card.getByRole('form', { name: 'Fix this card' });
   await editForm.getByLabel(/^Question/).fill(`${q} edited`);
   await editForm.getByRole('button', { name: 'Save' }).click();
+  // The form only closes once the PUT has finished, so wait for that before reloading.
+  await expect(editForm).toBeHidden();
+  await expect(card.getByText(`${q} edited`)).toBeVisible();
 
   // The edit must survive a reload, i.e. it reached the database.
   await page.reload();
@@ -45,6 +48,7 @@ test('create, flip, edit and delete a card', async ({ page }) => {
   // Confirm the delete.
   await editedCard.getByRole('button', { name: 'Toss' }).click();
   await dialog.getByRole('button', { name: 'Toss it' }).click();
+  // The card only leaves the list after the DELETE succeeded and the list was refetched.
   await expect(editedCard).toHaveCount(0);
 
   // Still gone after a reload.
