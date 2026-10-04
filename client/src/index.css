@@ -70,8 +70,17 @@
     opacity: 0.6;
   }
 
+  /* Binder tabs lift a little on hover; the selected tab (aria-pressed) stays put. */
+  .pop-tab {
+    transition: transform 0.1s ease;
+  }
+  .pop-tab:hover:not([aria-pressed='true']) {
+    transform: translateY(-3px);
+  }
+
   .pop-card:focus-visible,
   .pop-btn:focus-visible,
+  .pop-tab:focus-visible,
   .pop-field:focus-visible {
     outline: 4px solid var(--color-zap);
     outline-offset: 3px;
@@ -109,8 +118,12 @@
   @media (prefers-reduced-motion: reduce) {
     .pop-card,
     .pop-btn,
+    .pop-tab,
     .flip-inner {
       transition: none;
+    }
+    .pop-tab:hover:not([aria-pressed='true']) {
+      transform: none;
     }
     .pop-card:hover,
     .pop-card:active {
