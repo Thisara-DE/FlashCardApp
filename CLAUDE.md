@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stack
 
-[One-sentence description of your app — what it does and who it's for.]
-React + Vite frontend, Express backend (Node ESM). [Database: e.g. SQLite via Sequelize ORM — or remove if not added yet.]
+A flashcard app for studying via question/answer decks.
+React + Vite frontend, Express backend (Node ESM). Database: SQLite via Sequelize ORM.
 
 ## Commands
 
@@ -18,20 +18,29 @@ npm run dev -w client  # client only
 ## Structure
 
 ```
-client/        Vite + React frontend
-server/        Express API
-  src/app.js   Route handlers
-  src/index.js Entry point
-  [src/db.js   Sequelize instance + model definitions — add when DB is wired up]
-  [src/seed.js Idempotent seed function — add when DB is wired up]
+client/              Vite + React frontend
+  src/api/           fetch wrapper for /api/cards (ApiError)
+  src/hooks/         TanStack Query hooks (useCards, useCreateCard, ...)
+  src/validation/    card validation rules shared by the forms
+  src/components/    CardForm, CardGrid, FlashCard, ConfirmDialog
+server/              Express API
+  src/app.js         Route handlers
+  src/index.js       Entry point
+  src/db.js          Sequelize instance + Card model
+  src/seed.js        Idempotent seed function (fills an empty table only)
+  src/schemas/       Zod request schemas
+e2e/                 Playwright end-to-end tests
 ```
 
 ## API routes
 
-| Method | Path      | Description  |
-| ------ | --------- | ------------ |
-| GET    | /api/ping | health check |
-| [...]  | [...]     | [...]        |
+| Method | Path           | Description                      |
+| ------ | -------------- | -------------------------------- |
+| GET    | /api/ping      | health check                     |
+| GET    | /api/cards     | list all cards, newest first     |
+| POST   | /api/cards     | create a card (question, answer) |
+| PUT    | /api/cards/:id | update a card                    |
+| DELETE | /api/cards/:id | delete a card                    |
 
 The Vite dev server proxies `/api/*` to `http://localhost:3001`.
 
