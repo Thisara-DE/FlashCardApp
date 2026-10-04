@@ -21,6 +21,23 @@ async function findCardOr404(req, res) {
   return card;
 }
 
+// Returns the validated, trimmed card fields, or sends the 400 and returns null.
+// Callers must stop when this returns null, because the response is already sent.
+function parseCardOr400(req, res) {
+  const result = cardSchema.safeParse(req.body);
+  if (!result.success) {
+    res.status(400).json({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid card',
+        details: toFieldErrors(result.error),
+      },
+    });
+    return null;
+  }
+  return result.data;
+}
+
 app.get('/api/ping', (req, res) => {
   res.json({ message: 'pong' });
 });
@@ -42,17 +59,9 @@ app.get(
 app.post(
   '/api/cards',
   asyncHandler(async (req, res) => {
-    const result = cardSchema.safeParse(req.body);
-    if (!result.success) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid card',
-          details: toFieldErrors(result.error),
-        },
-      });
-    }
-    const card = await Card.create(result.data);
+    const data = parseCardOr400(req, res);
+    if (!data) return;
+    const card = await Card.create(data);
     res.status(201).json(card);
   }),
 );
@@ -63,17 +72,9 @@ app.put(
     // Look the card up first so an unknown id is a 404 even when the body is also invalid.
     const card = await findCardOr404(req, res);
     if (!card) return;
-    const result = cardSchema.safeParse(req.body);
-    if (!result.success) {
-      return res.status(400).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid card',
-          details: toFieldErrors(result.error),
-        },
-      });
-    }
-    await card.update(result.data);
+    const data = parseCardOr400(req, res);
+    if (!data) return;
+    await card.update(data);
     res.json(card);
   }),
 );
