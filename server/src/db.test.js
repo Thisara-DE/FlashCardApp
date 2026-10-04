@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { sequelize, Card } from './db.js';
-import { seed, SEED_CARDS } from './seed.js';
+import { sequelize, Card, Pile } from './db.js';
 
 beforeEach(async () => {
   await sequelize.sync({ force: true });
@@ -25,15 +24,20 @@ describe('Card model', () => {
   });
 });
 
-describe('seed()', () => {
-  it('inserts the sample cards into an empty table', async () => {
-    await seed();
-    expect(await Card.count()).toBe(SEED_CARDS.length);
+describe('Pile model', () => {
+  it('stores a name and owns cards through pileId', async () => {
+    const pile = await Pile.create({ name: 'Math' });
+    const card = await Card.create({ question: 'Q?', answer: 'A', pileId: pile.id });
+    expect(card.pileId).toBe(pile.id);
+    expect(await pile.countCards()).toBe(1);
   });
 
-  it('does nothing when cards already exist', async () => {
-    await Card.create({ question: 'Mine?', answer: 'Yes' });
-    await seed();
-    expect(await Card.count()).toBe(1);
+  it('allows a card with no pile (Unsorted)', async () => {
+    expect((await Card.create({ question: 'Q?', answer: 'A' })).pileId).toBeNull();
+  });
+
+  it('rejects an empty or 41-character name', async () => {
+    await expect(Pile.create({ name: '' })).rejects.toThrow();
+    await expect(Pile.create({ name: 'a'.repeat(41) })).rejects.toThrow();
   });
 });

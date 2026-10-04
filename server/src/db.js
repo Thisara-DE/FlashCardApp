@@ -14,7 +14,15 @@ export const sequelize = new Sequelize({
   logging: false,
 });
 
-// Zod checks input at the API boundary; the length rule here is a safety net.
+// Zod checks input at the API boundary; the length rules here are a safety net.
+export const Pile = sequelize.define('Pile', {
+  name: {
+    type: DataTypes.STRING(40),
+    allowNull: false,
+    validate: { len: [1, 40] },
+  },
+});
+
 export const Card = sequelize.define('Card', {
   question: {
     type: DataTypes.STRING(200),
@@ -26,4 +34,10 @@ export const Card = sequelize.define('Card', {
     allowNull: false,
     validate: { len: [1, 200] },
   },
+  // Null means the card is "Unsorted" (it has no pile). The explicit default
+  // makes a freshly created card report null instead of undefined.
+  pileId: { type: DataTypes.INTEGER, allowNull: true, defaultValue: null },
 });
+
+Pile.hasMany(Card, { foreignKey: 'pileId' });
+Card.belongsTo(Pile, { foreignKey: 'pileId' });

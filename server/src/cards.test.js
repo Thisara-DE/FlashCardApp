@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import app from './app.js';
 import { sequelize, Card } from './db.js';
-import { seed, SEED_CARDS } from './seed.js';
+import { seed, SEED_PILES } from './seed.js';
 
 beforeAll(async () => {
   await sequelize.sync({ force: true });
@@ -13,12 +13,12 @@ describe('GET /api/cards', () => {
   it('returns all cards, newest first', async () => {
     const res = await request(app).get('/api/cards');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(SEED_CARDS.length);
+    expect(res.body).toHaveLength(SEED_PILES.flatMap((p) => p.cards).length);
     // Seed rows share a createdAt; the id DESC tie-break makes the order stable.
     const ids = res.body.map((c) => c.id);
     expect(ids).toEqual([...ids].sort((a, b) => b - a));
     expect(Object.keys(res.body[0]).sort()).toEqual(
-      ['answer', 'createdAt', 'id', 'question', 'updatedAt'],
+      ['answer', 'createdAt', 'id', 'pileId', 'question', 'updatedAt'],
     );
   });
 
