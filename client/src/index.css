@@ -77,6 +77,11 @@
     outline-offset: 3px;
   }
 
+  /* Dims the page behind the native modal <dialog> (it can't be styled with utility classes). */
+  .pop-dialog::backdrop {
+    background: rgb(17 17 17 / 0.55);
+  }
+
   /* Halftone dot pattern for the decorative header circle. */
   .pop-dots {
     background-image: radial-gradient(var(--color-ink) 1.4px, transparent 1.6px);
