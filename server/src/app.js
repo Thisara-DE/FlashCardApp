@@ -1,6 +1,12 @@
 import express from 'express';
 import { Card, Pile, sequelize } from './db.js';
-import { cardSchema, toFieldErrors } from './schemas/card.js';
+import {
+  cardSchema,
+  createCardSchema,
+  cardsQuerySchema,
+  moveCardsSchema,
+  toFieldErrors,
+} from './schemas/card.js';
 import { pileSchema, deletePileQuerySchema } from './schemas/pile.js';
 
 const app = express();
@@ -150,8 +156,22 @@ app.delete(
 app.get(
   '/api/cards',
   asyncHandler(async (req, res) => {
+    const query = parseOr400(cardsQuerySchema, req.query, res, 'Invalid card filter');
+    if (!query) return;
+
+    // No pileId means no filter. 'unsorted' is cards without a pile; a number must be a real pile.
+    const where = {};
+    if (query.pileId === 'unsorted') {
+      where.pileId = null;
+    } else if (query.pileId !== undefined) {
+      // findByIdOr404 takes the id as text, like it arrives in a URL.
+      if (!(await findByIdOr404(Pile, String(query.pileId), res, 'Pile not found'))) return;
+      where.pileId = query.pileId;
+    }
+
     // id is the tie-break so cards created in the same millisecond keep a stable order.
     const cards = await Card.findAll({
+      where,
       order: [
         ['createdAt', 'DESC'],
         ['id', 'DESC'],
@@ -164,10 +184,35 @@ app.get(
 app.post(
   '/api/cards',
   asyncHandler(async (req, res) => {
-    const data = parseOr400(cardSchema, req.body, res, 'Invalid card');
+    const data = parseOr400(createCardSchema, req.body, res, 'Invalid card');
     if (!data) return;
+    if (data.pileId !== undefined) {
+      if (!(await findByIdOr404(Pile, String(data.pileId), res, 'Pile not found'))) return;
+    }
     const card = await Card.create(data);
     res.status(201).json(card);
+  }),
+);
+
+// Registered before the /api/cards/:id routes so "move" is never read as a card id.
+app.post(
+  '/api/cards/move',
+  asyncHandler(async (req, res) => {
+    const data = parseOr400(moveCardsSchema, req.body, res, 'Invalid move');
+    if (!data) return;
+    const { cardIds, pileId } = data;
+    if (!(await findByIdOr404(Pile, String(pileId), res, 'Pile not found'))) return;
+
+    // Check every card first so one unknown id moves nothing at all.
+    const existingCount = await Card.count({ where: { id: cardIds } });
+    if (existingCount !== cardIds.length) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Card not found' } });
+    }
+
+    await sequelize.transaction(async (transaction) => {
+      await Card.update({ pileId }, { where: { id: cardIds }, transaction });
+    });
+    res.json({ movedCount: cardIds.length });
   }),
 );
 
