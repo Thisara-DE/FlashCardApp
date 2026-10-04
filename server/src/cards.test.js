@@ -83,3 +83,49 @@ describe('POST /api/cards', () => {
     });
   });
 });
+
+async function makeCard() {
+  const res = await request(app).post('/api/cards').send({ question: 'Old?', answer: 'Old' });
+  return res.body;
+}
+
+describe('PUT /api/cards/:id', () => {
+  it('replaces both sides, trims them, and returns 200', async () => {
+    const card = await makeCard();
+    const res = await request(app)
+      .put(`/api/cards/${card.id}`)
+      .send({ question: ' New? ', answer: ' New ' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: card.id, question: 'New?', answer: 'New' });
+  });
+
+  it('requires both fields (400, card unchanged)', async () => {
+    const card = await makeCard();
+    const res = await request(app).put(`/api/cards/${card.id}`).send({ question: 'Only?' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.details).toEqual({ answer: 'Answer is required' });
+    expect((await Card.findByPk(card.id)).question).toBe('Old?');
+  });
+
+  it.each(['999999', 'abc', '0', '-1', '1.5'])('returns 404 NOT_FOUND for id %s', async (id) => {
+    const res = await request(app).put(`/api/cards/${id}`).send({ question: 'Q', answer: 'A' });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('DELETE /api/cards/:id', () => {
+  it('deletes the card and returns 204 with no body', async () => {
+    const card = await makeCard();
+    const res = await request(app).delete(`/api/cards/${card.id}`);
+    expect(res.status).toBe(204);
+    expect(res.text).toBe('');
+    expect(await Card.findByPk(card.id)).toBeNull();
+  });
+
+  it.each(['999999', 'abc'])('returns 404 NOT_FOUND for id %s', async (id) => {
+    const res = await request(app).delete(`/api/cards/${id}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: { code: 'NOT_FOUND', message: 'Card not found' } });
+  });
+});

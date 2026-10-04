@@ -9,6 +9,18 @@ app.use(express.json());
 // Express 4 doesn't forward rejected promises to the error middleware on its own.
 const asyncHandler = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
+// Sends the 404 and returns null when the id isn't a positive integer or no card has it.
+// Callers must stop when this returns null, because the response is already sent.
+async function findCardOr404(req, res) {
+  const { id } = req.params;
+  const card = /^[1-9]\d*$/.test(id) ? await Card.findByPk(Number(id)) : null;
+  if (!card) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Card not found' } });
+    return null;
+  }
+  return card;
+}
+
 app.get('/api/ping', (req, res) => {
   res.json({ message: 'pong' });
 });
@@ -42,6 +54,37 @@ app.post(
     }
     const card = await Card.create(result.data);
     res.status(201).json(card);
+  }),
+);
+
+app.put(
+  '/api/cards/:id',
+  asyncHandler(async (req, res) => {
+    // Look the card up first so an unknown id is a 404 even when the body is also invalid.
+    const card = await findCardOr404(req, res);
+    if (!card) return;
+    const result = cardSchema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid card',
+          details: toFieldErrors(result.error),
+        },
+      });
+    }
+    await card.update(result.data);
+    res.json(card);
+  }),
+);
+
+app.delete(
+  '/api/cards/:id',
+  asyncHandler(async (req, res) => {
+    const card = await findCardOr404(req, res);
+    if (!card) return;
+    await card.destroy();
+    res.status(204).end();
   }),
 );
 
