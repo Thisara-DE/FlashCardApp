@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-test('home page shows the app title', async ({ page }) => {
+test('home page shows the BrainCramBam title', async ({ page }) => {
   await page.goto('/');
 
   await expect(
-    page.getByRole('heading', { name: /flash card app/i }),
+    page.getByRole('heading', { name: /brain\s*cram\s*bam/i }),
   ).toBeVisible();
 });
 
