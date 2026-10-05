@@ -39,7 +39,7 @@ test('a card made in a pile shows only in that pile', async ({ page }) => {
 test('two held cards can be dragged onto another pile tab', async ({ page }) => {
   // Tall enough to see the tabs and the cards at once: a drag can't reach a tab that is off screen,
   // and the other tests' piles can wrap the tab row onto several lines.
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.setViewportSize({ width: 1280, height: 1200 });
   const pileA = uniqueName('Drag A');
   const pileB = uniqueName('Drag B');
   const question1 = uniqueName('Drag one?');
@@ -67,8 +67,13 @@ test('two held cards can be dragged onto another pile tab', async ({ page }) => 
   // Hold card 2, then drag it (and the rest of the selection) onto tab B.
   const face2 = page.getByRole('listitem').filter({ hasText: question2 }).getByRole('button', { name: question2 });
   const tabB = page.getByRole('button', { name: `${pileB} · 0` });
+  // Scroll to the top, then check both are fully on screen before measuring either, so neither
+  // measurement scrolls the page (centreOf scrolls only what is off screen). At the very top,
+  // dnd-kit's auto-scroll can't move the page while the pointer rests on a tab near the top.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(face2).toBeInViewport({ ratio: 1 });
+  await expect(tabB).toBeInViewport({ ratio: 1 });
   const start = await centreOf(face2);
-  await expect(tabB).toBeInViewport();
   const target = await centreOf(tabB);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
