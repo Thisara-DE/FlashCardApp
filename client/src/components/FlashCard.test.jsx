@@ -269,16 +269,17 @@ describe('FlashCard', () => {
       expect(questionFace()).not.toHaveClass('is-selected');
     });
 
-    it('passes pointer down to the drag listeners as well as to the long press', () => {
+    it('passes mouse down and touch start to the drag listeners, and the long press still fires', () => {
       vi.useFakeTimers();
-      const dragListeners = { onPointerDown: vi.fn(), onTouchStart: vi.fn() };
+      const dragListeners = { onMouseDown: vi.fn(), onTouchStart: vi.fn() };
       const { onLongPress } = renderCard({ dragListeners });
 
       fireEvent.pointerDown(questionFace(), { clientX: 5, clientY: 5 });
+      fireEvent.mouseDown(questionFace());
       act(() => vi.advanceTimersByTime(400));
       fireEvent.touchStart(questionFace());
 
-      expect(dragListeners.onPointerDown).toHaveBeenCalledTimes(1);
+      expect(dragListeners.onMouseDown).toHaveBeenCalledTimes(1);
       expect(onLongPress).toHaveBeenCalledWith(card.id);
       expect(dragListeners.onTouchStart).toHaveBeenCalledTimes(1);
     });
