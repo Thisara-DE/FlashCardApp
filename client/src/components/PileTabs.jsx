@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
+import { useDroppable } from '@dnd-kit/core';
 import PileNameForm from './PileNameForm.jsx';
 
 // Colour by position, so neighbouring tabs differ. The selected tab ignores this and uses the panel colour.
@@ -14,6 +15,43 @@ function tabClasses({ selected, colour, dashed = false }) {
   const border = dashed ? 'border-dashed' : '';
   return `${TAB_BASE} ${border} ${selected ? TAB_SELECTED : colour}`;
 }
+
+// Inverted colours and a dashed outline while dragged cards hover over the tab.
+const TAB_DROP_TARGET = 'bg-ink text-sun outline-4 outline-offset-[6px] outline-dashed outline-ink';
+
+// One pile's tab. It is also a drop target for dragged cards, except for the pile they are already in.
+function PileTab({ pile, selected, colour, onSelect }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `pile-${pile.id}`,
+    data: { pileId: pile.id, name: pile.name },
+    disabled: selected,
+  });
+  const label = `${pile.name} · ${pile.cardCount}`;
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      aria-pressed={selected}
+      onClick={() => onSelect(pile.id)}
+      className={tabClasses({ selected, colour: isOver ? TAB_DROP_TARGET : colour })}
+    >
+      {isOver ? `Drop into ${label}` : label}
+    </button>
+  );
+}
+
+PileTab.propTypes = {
+  pile: PropTypes.shape({
+    id: PropTypes.number.isRequired,
+    name: PropTypes.string.isRequired,
+    cardCount: PropTypes.number.isRequired,
+  }).isRequired,
+  selected: PropTypes.bool.isRequired,
+  // Background (and text) colour classes for an unselected tab.
+  colour: PropTypes.string.isRequired,
+  onSelect: PropTypes.func.isRequired,
+};
 
 export default function PileTabs({ piles, unsortedCount, selectedKey, onSelect, onCreatePile }) {
   const [isCreating, setIsCreating] = useState(false);
@@ -43,20 +81,15 @@ export default function PileTabs({ piles, unsortedCount, selectedKey, onSelect, 
 
   return (
     <nav aria-label="Piles" className="flex flex-wrap items-end gap-2 px-3">
-      {piles.map((pile, index) => {
-        const selected = pile.id === selectedKey;
-        return (
-          <button
-            key={pile.id}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onSelect(pile.id)}
-            className={tabClasses({ selected, colour: TAB_COLOURS[index % TAB_COLOURS.length] })}
-          >
-            {pile.name} · {pile.cardCount}
-          </button>
-        );
-      })}
+      {piles.map((pile, index) => (
+        <PileTab
+          key={pile.id}
+          pile={pile}
+          selected={pile.id === selectedKey}
+          colour={TAB_COLOURS[index % TAB_COLOURS.length]}
+          onSelect={onSelect}
+        />
+      ))}
       {unsortedCount > 0 && (
         <button
           type="button"

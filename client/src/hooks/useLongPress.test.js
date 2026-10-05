@@ -37,6 +37,24 @@ describe('useLongPress', () => {
     expect(onLongPress).not.toHaveBeenCalled();
   });
 
+  it('ignores a held right (or middle) mouse button', () => {
+    const { onLongPress, handlers } = setup();
+
+    act(() => handlers().onPointerDown({ pointerType: 'mouse', button: 2, clientX: 10, clientY: 10 }));
+    act(() => vi.advanceTimersByTime(400));
+
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+
+  it('fires for a held primary mouse button', () => {
+    const { onLongPress, handlers } = setup();
+
+    act(() => handlers().onPointerDown({ pointerType: 'mouse', button: 0, clientX: 10, clientY: 10 }));
+    act(() => vi.advanceTimersByTime(400));
+
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
   it('does not fire if the pointer moves more than 8 px', () => {
     const { onLongPress, handlers } = setup();
 

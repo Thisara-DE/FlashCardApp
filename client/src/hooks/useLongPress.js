@@ -25,6 +25,8 @@ export function useLongPress(onLongPress, { delay = 400, tolerance = 8 } = {}) {
   useEffect(() => cancelTimer, []);
 
   function onPointerDown(event) {
+    // Only the main mouse button: holding the right button (for the context menu) should not select.
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
     // A new press starts fresh, so a long press whose click never arrived can't swallow this one.
     firedRef.current = false;
     cancelTimer();

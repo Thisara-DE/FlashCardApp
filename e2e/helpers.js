@@ -25,6 +25,37 @@ export async function addCard(page, pileName, question, answer = 'An answer') {
   await expect(page.getByRole('listitem').filter({ hasText: question })).toBeVisible();
 }
 
+// The centre of an element in viewport coordinates, for driving the mouse by hand.
+// page.mouse never scrolls, so scroll the element into view first: with many piles in the shared
+// database the tab row wraps, and a card can sit below the bottom of the window.
+export async function centreOf(locator) {
+  await locator.scrollIntoViewIfNeeded();
+  const box = await locator.boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+// A press and hold also starts a dnd-kit drag (both wait the same 400 ms). When that drag ends,
+// dnd-kit swallows every click on the page for the next 50 ms (a `setTimeout(…, 50)`), so the
+// click that ends the hold can't count as a click. A person never clicks again that fast; a test
+// does. A 50 ms timer started in the page now is due after dnd-kit's, so once it has fired,
+// clicks work again. (A wait in the test process could finish first on a busy machine.)
+export async function waitForDragToSettle(page) {
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
+}
+
+// Presses and holds a card face (400 ms selects it), then lets go.
+export async function pressAndHold(page, face) {
+  const { x, y } = await centreOf(face);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  // Still holding: wait until the card shows as selected. On a busy machine the page's 400 ms
+  // timer can run late, and letting go before it fires would cancel the hold.
+  await expect(face).toHaveAttribute('aria-pressed', 'true');
+  await page.mouse.up();
+  await waitForDragToSettle(page);
+}
+
 // The selected pile's "Delete pile" button. Scoped to <main>, because the empty-pile
 // confirm dialog has a button with the same name.
 export function deletePileButton(page) {

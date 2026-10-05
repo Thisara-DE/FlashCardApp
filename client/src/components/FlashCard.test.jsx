@@ -1,7 +1,8 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FlashCard from './FlashCard.jsx';
+import { renderWithClient } from '../test-utils.jsx';
 
 const card = { id: 1, question: 'Capital of Australia?', answer: 'Canberra' };
 
@@ -13,7 +14,7 @@ function renderCard(props = {}) {
     onToggleSelect: vi.fn(),
   };
   const allProps = { card, ...handlers, ...props };
-  const view = render(<FlashCard {...allProps} />);
+  const view = renderWithClient(<FlashCard {...allProps} />);
   return { ...allProps, props: allProps, rerender: view.rerender, user: userEvent.setup() };
 }
 
@@ -247,6 +248,20 @@ describe('FlashCard', () => {
       renderCard({ selectionMode: true });
 
       expect(questionFace()).not.toHaveClass('is-selected');
+    });
+
+    it('passes pointer down to the drag listeners as well as to the long press', () => {
+      vi.useFakeTimers();
+      const dragListeners = { onPointerDown: vi.fn(), onTouchStart: vi.fn() };
+      const { onLongPress } = renderCard({ dragListeners });
+
+      fireEvent.pointerDown(questionFace(), { clientX: 5, clientY: 5 });
+      act(() => vi.advanceTimersByTime(400));
+      fireEvent.touchStart(questionFace());
+
+      expect(dragListeners.onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onLongPress).toHaveBeenCalledWith(card.id);
+      expect(dragListeners.onTouchStart).toHaveBeenCalledTimes(1);
     });
 
     it('outside selection mode the footer says "Flip it →"', () => {

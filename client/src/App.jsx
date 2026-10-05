@@ -1,16 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useQueryClient } from '@tanstack/react-query';
+import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 import { ApiError } from './api/cards.js';
 import CardForm from './components/CardForm.jsx';
 import CardGrid from './components/CardGrid.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import DeletePileDialog from './components/DeletePileDialog.jsx';
+import DragGhost from './components/DragGhost.jsx';
 import NoPilesState from './components/NoPilesState.jsx';
 import PileHeader from './components/PileHeader.jsx';
 import PileTabs from './components/PileTabs.jsx';
 import SelectionBar from './components/SelectionBar.jsx';
 import { useCardSelection } from './hooks/useCardSelection.js';
+import { useDragSensors } from './hooks/useDragSensors.js';
 import { useCards, useCreateCard, useDeleteCard, useMoveCards, useUpdateCard } from './hooks/useCards.js';
 import { useCreatePile, useDeletePile, usePiles, useRenamePile } from './hooks/usePiles.js';
 import { useSelectedPile } from './hooks/useSelectedPile.js';
@@ -20,6 +23,17 @@ const DELETE_ERROR = "Couldn't toss this card. Try again.";
 const PILE_DELETE_ERROR = "Couldn't delete this pile. Try again.";
 const MOVE_ERROR = "Couldn't move those cards. Try again.";
 const PILE_TIP = 'Tip: press and hold a card to select it, then drag it onto another pile.';
+
+// dnd-kit would announce "Picked up draggable item 12" and the like. Our own status region already
+// says "Moved N cards to ‹Name›" after a drop, so its announcements are switched off (undefined = silent).
+const DRAG_ACCESSIBILITY = {
+  announcements: {
+    onDragStart: () => undefined,
+    onDragOver: () => undefined,
+    onDragEnd: () => undefined,
+    onDragCancel: () => undefined,
+  },
+};
 
 // The paper panel under the tabs, and the boxes shown while the piles load.
 const PANEL = 'border-4 border-ink bg-paper p-7 shadow-[10px_10px_0_var(--color-ink)]';
@@ -134,6 +148,9 @@ function App() {
   const [moveError, setMoveError] = useState(null);
   // Read out by screen readers after a move, e.g. "Moved 2 cards to Math".
   const [moveAnnouncement, setMoveAnnouncement] = useState('');
+  // True while cards are being dragged, to show the "N cards" ghost under the pointer.
+  const [isDragging, setIsDragging] = useState(false);
+  const dragSensors = useDragSensors();
 
   const isDialogOpen = cardToDelete !== null || pileToDelete !== null;
 
@@ -182,14 +199,15 @@ function App() {
 
   // Moves every selected card into the pile with this id. Move to… calls it; so will dropping on a tab.
   async function handleMove(pileId) {
-    const target = piles.find((pile) => pile.id === pileId);
+    // Read the name now: the piles list may have changed by the time the move finishes.
+    const targetName = piles.find((pile) => pile.id === pileId)?.name ?? 'the pile';
     setMoveError(null);
     // Empty it first, so moving the same number of cards to the same pile twice is announced twice.
     setMoveAnnouncement('');
     try {
       await moveCards.mutateAsync({ cardIds: selectedIds, pileId });
       const count = selectedIds.length;
-      setMoveAnnouncement(`Moved ${count} ${plural(count, 'card', 'cards')} to ${target.name}`);
+      setMoveAnnouncement(`Moved ${count} ${plural(count, 'card', 'cards')} to ${targetName}`);
       clear();
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
@@ -201,6 +219,21 @@ function App() {
         setMoveError(MOVE_ERROR);
       }
     }
+  }
+
+  // Dragging an unselected card adds it to the selection first, the same as a long press.
+  // The drag then carries the whole selection.
+  function handleDragStart({ active }) {
+    setIsDragging(true);
+    handleLongPress(active.id);
+  }
+
+  function handleDragEnd({ over }) {
+    setIsDragging(false);
+    // Only the other piles' tabs are drop targets. Dropping anywhere else does nothing.
+    const pileId = over?.data.current?.pileId;
+    if (pileId === undefined || pileId === selectedKey || moveCards.isPending) return;
+    handleMove(pileId);
   }
 
   // PileTabs selects the new pile itself once this resolves.
@@ -396,17 +429,30 @@ function App() {
     }
 
     // No gap between the tabs and the panel: the selected tab sits on the panel's top border.
+    // Cards in the panel can be dragged onto the tabs. pointerWithin: the drop target is the tab
+    // under the pointer, not whichever tab the (much bigger) dragged card overlaps most.
     return (
-      <div className="flex flex-col">
-        <PileTabs
-          piles={piles}
-          unsortedCount={pilesData.unsortedCount}
-          selectedKey={selectedKey}
-          onSelect={handleSelectPile}
-          onCreatePile={handleCreatePile}
-        />
-        {renderPilePanel()}
-      </div>
+      <DndContext
+        sensors={dragSensors}
+        collisionDetection={pointerWithin}
+        accessibility={DRAG_ACCESSIBILITY}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setIsDragging(false)}
+      >
+        <div className="flex flex-col">
+          <PileTabs
+            piles={piles}
+            unsortedCount={pilesData.unsortedCount}
+            selectedKey={selectedKey}
+            onSelect={handleSelectPile}
+            onCreatePile={handleCreatePile}
+          />
+          {renderPilePanel()}
+        </div>
+        {/* No drop animation: after a move the dragged cards are gone from this pile. */}
+        <DragOverlay dropAnimation={null}>{isDragging && <DragGhost count={selectedIds.length} />}</DragOverlay>
+      </DndContext>
     );
   }
 

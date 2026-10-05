@@ -1,8 +1,25 @@
 import PropTypes from 'prop-types';
+import { useDraggable } from '@dnd-kit/core';
 import FlashCard from './FlashCard.jsx';
 
 // Same white bordered panel look as the create form.
 const PANEL = 'border-4 border-ink bg-white p-7 shadow-[10px_10px_0_var(--color-ink)]';
+
+// One card, made draggable (the draggable id is the card id). Every other prop goes to FlashCard.
+// The card itself stays in place while dragging: App's DragOverlay draws the "N cards" ghost instead.
+function DraggableCardItem({ card, ...flashCardProps }) {
+  const { setNodeRef, listeners } = useDraggable({ id: card.id });
+  return (
+    <div ref={setNodeRef}>
+      <FlashCard card={card} {...flashCardProps} dragListeners={listeners} />
+    </div>
+  );
+}
+
+DraggableCardItem.propTypes = {
+  // The rest of the props are FlashCard's, and FlashCard checks them.
+  card: PropTypes.shape({ id: PropTypes.number.isRequired }).isRequired,
+};
 
 // The cards of one pile. It has no heading of its own: the pile panel's header names it.
 export default function CardGrid({
@@ -60,7 +77,7 @@ export default function CardGrid({
         {/* Keying by id (not index) keeps each card's flip state when the list is refetched. */}
         {cards.map((card) => (
           <li key={card.id}>
-            <FlashCard
+            <DraggableCardItem
               card={card}
               onSave={(values) => onSaveCard(card.id, values)}
               onRequestDelete={onRequestDelete}

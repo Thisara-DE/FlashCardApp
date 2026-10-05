@@ -1,7 +1,8 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import CardGrid from './CardGrid.jsx';
+import { renderWithClient } from '../test-utils.jsx';
 
 const card1 = { id: 1, question: 'Capital of Australia?', answer: 'Canberra' };
 const card2 = { id: 2, question: 'Capital of France?', answer: 'Paris' };
@@ -23,7 +24,7 @@ function renderGrid(props = {}) {
     ...handlers,
     ...props,
   };
-  const view = render(<CardGrid {...allProps} />);
+  const view = renderWithClient(<CardGrid {...allProps} />);
   return { ...handlers, ...view, props: allProps, user: userEvent.setup() };
 }
 
@@ -38,7 +39,8 @@ describe('CardGrid', () => {
   it('shows a loading status while loading', () => {
     renderGrid({ cards: undefined, isLoading: true });
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading cards…');
+    // getByText, not getByRole('status'): the DndContext adds its own (empty) live region.
+    expect(screen.getByText('Loading cards…')).toHaveAttribute('role', 'status');
   });
 
   it('shows an error with a Retry button that calls onRetry', async () => {
@@ -62,14 +64,14 @@ describe('CardGrid', () => {
     renderGrid({ cards: undefined, isError: true, isFetching: true });
 
     expect(screen.getByRole('button', { name: 'Retry' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('Loading cards…');
+    expect(screen.getByText('Loading cards…')).toHaveAttribute('role', 'status');
   });
 
   it('keeps Retry enabled and shows no status when nothing is fetching', () => {
     renderGrid({ cards: undefined, isError: true });
 
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading cards…')).not.toBeInTheDocument();
   });
 
   it('shows the emptyMessage when there are no cards', () => {

@@ -16,6 +16,7 @@ export default function FlashCard({
   selectionMode = false,
   onLongPress,
   onToggleSelect,
+  dragListeners,
 }) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -35,6 +36,15 @@ export default function FlashCard({
   function closeEditor() {
     restoreFocusRef.current = true;
     setIsEditing(false);
+  }
+
+  // dnd-kit's listeners: onPointerDown starts a mouse or pen drag, onTouchStart a touch drag.
+  // The face needs onPointerDown for the long press too, so one handler calls both.
+  const { onPointerDown: onDragPointerDown, ...otherDragListeners } = dragListeners ?? {};
+
+  function handlePointerDown(event) {
+    longPressHandlers.onPointerDown(event);
+    onDragPointerDown?.(event);
   }
 
   function handleFaceClick() {
@@ -78,7 +88,9 @@ export default function FlashCard({
         type="button"
         aria-pressed={selectionMode ? selected : isFlipped}
         onClick={handleFaceClick}
+        {...otherDragListeners}
         {...longPressHandlers}
+        onPointerDown={handlePointerDown}
         className={`pop-card relative block w-full cursor-pointer border-4 border-ink bg-transparent p-0 text-left shadow-[8px_8px_0_var(--color-ink)] [perspective:1200px] ${isFlipped ? 'is-flipped' : ''} ${selected ? 'is-selected' : ''}`}
       >
         {selected && (
@@ -159,4 +171,7 @@ FlashCard.propTypes = {
   onLongPress: PropTypes.func.isRequired,
   // Called with the card id when the card is tapped in selection mode.
   onToggleSelect: PropTypes.func.isRequired,
+  // dnd-kit's useDraggable listeners, so the card can be dragged onto a pile tab. Its attributes are
+  // left out on purpose: they would add a second role="button", and Move to… is the accessible path.
+  dragListeners: PropTypes.objectOf(PropTypes.func),
 };

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PileTabs from './PileTabs.jsx';
+import { renderWithClient } from '../test-utils.jsx';
 import { ApiError } from '../api/request.js';
 
 const PILES = [
@@ -12,7 +13,7 @@ const PILES = [
 function renderTabs(props = {}) {
   const onSelect = vi.fn();
   const onCreatePile = props.onCreatePile ?? vi.fn().mockResolvedValue({ id: 9, name: 'Bio', cardCount: 0 });
-  render(
+  renderWithClient(
     <PileTabs
       piles={PILES}
       unsortedCount={0}
@@ -42,7 +43,7 @@ describe('PileTabs', () => {
   });
 
   it('shows the Unsorted tab after the piles, and only when there are unsorted cards', () => {
-    const { unmount } = render(
+    const { unmount } = renderWithClient(
       <PileTabs piles={PILES} unsortedCount={3} selectedKey={1} onSelect={vi.fn()} onCreatePile={vi.fn()} />,
     );
     const labels = within(screen.getByRole('navigation', { name: 'Piles' }))

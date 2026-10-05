@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { addCard, createPile, deletePileButton, uniqueName } from './helpers.js';
+import {
+  addCard,
+  centreOf,
+  createPile,
+  deletePileButton,
+  pressAndHold,
+  uniqueName,
+  waitForDragToSettle,
+} from './helpers.js';
 
 test('a card made in a pile shows only in that pile', async ({ page }) => {
   const pileA = uniqueName('Pile A');
@@ -28,6 +36,61 @@ test('a card made in a pile shows only in that pile', async ({ page }) => {
   await expect(page.getByRole('button', { name: `${pileA} · 1` })).toBeVisible();
 });
 
+test('two held cards can be dragged onto another pile tab', async ({ page }) => {
+  // Tall enough to see the tabs and the cards at once: a drag can't reach a tab that is off screen,
+  // and the other tests' piles can wrap the tab row onto several lines.
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const pileA = uniqueName('Drag A');
+  const pileB = uniqueName('Drag B');
+  const question1 = uniqueName('Drag one?');
+  const question2 = uniqueName('Drag two?');
+  await page.goto('/');
+  await createPile(page, pileB);
+  await createPile(page, pileA);
+  await addCard(page, pileA, question1);
+  // The form stays open after a save, so type the second card straight into it.
+  const form = page.getByRole('form', { name: `New ${pileA} card` });
+  await form.getByLabel(/^Question/).fill(question2);
+  await form.getByLabel(/^Answer/).fill('Another answer');
+  await form.getByRole('button', { name: 'Slam it in!' }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: question2 })).toBeVisible();
+  await expect(page.getByRole('button', { name: `${pileA} · 2` })).toBeVisible();
+  // Close the form, so the cards don't jump up when selecting hides it.
+  await form.getByRole('button', { name: 'Cancel' }).click();
+  await expect(form).toHaveCount(0);
+
+  // Press and hold card 1 (400 ms) to select it.
+  const face1 = page.getByRole('listitem').filter({ hasText: question1 }).getByRole('button', { name: question1 });
+  await pressAndHold(page, face1);
+  await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+
+  // Hold card 2, then drag it (and the rest of the selection) onto tab B.
+  const face2 = page.getByRole('listitem').filter({ hasText: question2 }).getByRole('button', { name: question2 });
+  const tabB = page.getByRole('button', { name: `${pileB} · 0` });
+  const start = await centreOf(face2);
+  await expect(tabB).toBeInViewport();
+  const target = await centreOf(tabB);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.waitForTimeout(450);
+  // Still holding: wait for the drag to start (the "2 cards" ghost). Moving more than 8 px before
+  // that would cancel the hold, and on a busy machine the page's 400 ms timer can run late.
+  await expect(page.getByText('2 cards', { exact: true })).toBeVisible();
+  await page.mouse.move(target.x, target.y, { steps: 10 });
+  await expect(page.getByRole('button', { name: `Drop into ${pileB} · 0` })).toBeVisible();
+  await page.mouse.up();
+  await waitForDragToSettle(page);
+
+  await expect(page.getByRole('button', { name: `${pileA} · 0` })).toBeVisible();
+  await expect(page.getByRole('button', { name: `${pileB} · 2` })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: `Moved 2 cards to ${pileB}` })).toBeAttached();
+
+  await page.getByRole('button', { name: `${pileB} · 2` }).click();
+  await expect(page.getByRole('heading', { name: pileB, exact: true })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: question1 })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: question2 })).toBeVisible();
+});
+
 test('deleting a pile keeps its cards in Unsorted, and Move to… moves them into a pile', async ({ page }) => {
   const pileName = uniqueName('Keep');
   const targetName = uniqueName('Target');
@@ -53,10 +116,7 @@ test('deleting a pile keeps its cards in Unsorted, and Move to… moves them int
 
   // Press and hold the card (400 ms) to select it.
   const face = card.getByRole('button', { name: question });
-  await face.hover();
-  await page.mouse.down();
-  await page.waitForTimeout(450);
-  await page.mouse.up();
+  await pressAndHold(page, face);
   await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
   await expect(face).toHaveAttribute('aria-pressed', 'true');
 
