@@ -1,5 +1,5 @@
 import express from 'express';
-import { Card, Pile, sequelize } from './db.js';
+import { Card, Pile, runInTransaction } from './db.js';
 import {
   cardSchema,
   createCardSchema,
@@ -140,7 +140,7 @@ app.delete(
 
     // Cards first, then the pile, in one transaction: a failure half-way leaves everything as it was.
     // Handling the cards first also keeps the pileId foreign key satisfied.
-    await sequelize.transaction(async (transaction) => {
+    await runInTransaction(async (transaction) => {
       const where = { pileId: pile.id };
       if (query.cards === 'delete') {
         await Card.destroy({ where, transaction });
@@ -205,7 +205,7 @@ app.post(
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Card not found' } });
     }
 
-    await sequelize.transaction(async (transaction) => {
+    await runInTransaction(async (transaction) => {
       await Card.update({ pileId }, { where: { id: cardIds }, transaction });
     });
     res.json({ movedCount: cardIds.length });
