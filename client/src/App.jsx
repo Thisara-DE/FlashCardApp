@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
@@ -12,16 +12,16 @@ import NoPilesState from './components/NoPilesState.jsx';
 import PileHeader from './components/PileHeader.jsx';
 import PileTabs from './components/PileTabs.jsx';
 import SelectionBar from './components/SelectionBar.jsx';
-import { useCardSelection } from './hooks/useCardSelection.js';
+import { useCards, useCreateCard, useDeleteCard, useUpdateCard } from './hooks/useCards.js';
 import { useDragSensors } from './hooks/useDragSensors.js';
-import { useCards, useCreateCard, useDeleteCard, useMoveCards, useUpdateCard } from './hooks/useCards.js';
-import { useCreatePile, useDeletePile, usePiles, useRenamePile } from './hooks/usePiles.js';
+import { useMoveSelection } from './hooks/useMoveSelection.js';
+import { usePileDelete } from './hooks/usePileDelete.js';
+import { usePileDrag } from './hooks/usePileDrag.js';
+import { useCreatePile, usePiles, useRenamePile } from './hooks/usePiles.js';
 import { useSelectedPile } from './hooks/useSelectedPile.js';
 import { CARDS_KEY, PILES_KEY } from './hooks/useSyncedMutation.js';
 
 const DELETE_ERROR = "Couldn't toss this card. Try again.";
-const PILE_DELETE_ERROR = "Couldn't delete this pile. Try again.";
-const MOVE_ERROR = "Couldn't move those cards. Try again.";
 const PILE_TIP = 'Tip: press and hold a card to select it, then drag it onto another pile.';
 
 // dnd-kit would announce "Picked up draggable item 12" and the like. Our own status region already
@@ -115,11 +115,9 @@ function App() {
 
   const createPile = useCreatePile();
   const renamePile = useRenamePile();
-  const deletePile = useDeletePile();
   const createCard = useCreateCard();
   const updateCard = useUpdateCard();
   const deleteCard = useDeleteCard();
-  const moveCards = useMoveCards();
 
   const panelHeadingId = useId();
   const [newCardOpen, setNewCardOpen] = useState(false);
@@ -129,45 +127,34 @@ function App() {
   const [cardToDelete, setCardToDelete] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
 
-  // The pile waiting for delete confirmation: { id, name, cardCount }, or null when no dialog is open.
-  // An empty pile gets the simple confirm; a pile with cards asks what to do with them.
-  const [pileToDelete, setPileToDelete] = useState(null);
-  const [pileDeleteError, setPileDeleteError] = useState(null);
-
   const piles = pilesData?.piles ?? [];
   const isUnsorted = selectedKey === 'unsorted';
   const selectedPile = piles.find((pile) => pile.id === selectedKey);
+
+  const pileDelete = usePileDelete({ piles, onSelectPile: setSelectedKey, onStale: refetchCardsAndPiles });
 
   const cards = cardsQuery.data;
   // Only show the error panel when there is nothing to show: a failed background
   // refetch should not replace a list the user can already see.
   const showLoadError = cardsQuery.isError && cards === undefined;
 
-  // Selected cards, for Move to…. Only ids of cards that are still on screen count.
-  const { selectedIds, isSelecting, select, toggle, clear } = useCardSelection(cards ?? []);
-  const [moveError, setMoveError] = useState(null);
-  // Read out by screen readers after a move, e.g. "Moved 2 cards to Math".
-  const [moveAnnouncement, setMoveAnnouncement] = useState('');
-  // True while cards are being dragged, to show the "N cards" ghost under the pointer.
-  const [isDragging, setIsDragging] = useState(false);
+  const isDialogOpen = cardToDelete !== null || pileDelete.pileToDelete !== null;
+
+  // Selected cards, for Move to… and dragging. Only ids of cards that are still on screen count.
+  const {
+    selectedIds,
+    isSelecting,
+    moveError,
+    moveAnnouncement,
+    isMovePending,
+    clearSelection,
+    handleLongPress,
+    handleToggleSelect,
+    handleMove,
+  } = useMoveSelection({ cards: cards ?? [], piles, isDialogOpen, onStale: refetchCardsAndPiles });
+
   const dragSensors = useDragSensors();
-
-  const isDialogOpen = cardToDelete !== null || pileToDelete !== null;
-
-  // Esc ends selection mode. Not while a dialog is open: there, Esc closes the dialog instead.
-  useEffect(() => {
-    if (!isSelecting || isDialogOpen) return undefined;
-
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') {
-        clear();
-        setMoveError(null);
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isSelecting, isDialogOpen, clear]);
+  const pileDrag = usePileDrag({ selectedKey, isMovePending, onPickUp: handleLongPress, onDrop: handleMove });
 
   // Used when the server says something is gone: another tab or device changed the data.
   function refetchCardsAndPiles() {
@@ -179,61 +166,6 @@ function App() {
     setSelectedKey(key);
     setNewCardOpen(false);
     clearSelection();
-  }
-
-  function clearSelection() {
-    clear();
-    setMoveError(null);
-  }
-
-  // An old move error was about a different set of cards, so any change to the selection hides it.
-  function handleLongPress(cardId) {
-    setMoveError(null);
-    select(cardId);
-  }
-
-  function handleToggleSelect(cardId) {
-    setMoveError(null);
-    toggle(cardId);
-  }
-
-  // Moves every selected card into the pile with this id. Move to… calls it; so will dropping on a tab.
-  async function handleMove(pileId) {
-    // Read the name now: the piles list may have changed by the time the move finishes.
-    const targetName = piles.find((pile) => pile.id === pileId)?.name ?? 'the pile';
-    setMoveError(null);
-    // Empty it first, so moving the same number of cards to the same pile twice is announced twice.
-    setMoveAnnouncement('');
-    try {
-      await moveCards.mutateAsync({ cardIds: selectedIds, pileId });
-      const count = selectedIds.length;
-      setMoveAnnouncement(`Moved ${count} ${plural(count, 'card', 'cards')} to ${targetName}`);
-      clear();
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        // A card or the pile was deleted elsewhere. Refetch: vanished cards drop out of the
-        // selection, and a vanished pile drops out of Move to….
-        refetchCardsAndPiles();
-      } else {
-        // Keep the selection, so the user can simply try again.
-        setMoveError(MOVE_ERROR);
-      }
-    }
-  }
-
-  // Dragging an unselected card adds it to the selection first, the same as a long press.
-  // The drag then carries the whole selection.
-  function handleDragStart({ active }) {
-    setIsDragging(true);
-    handleLongPress(active.id);
-  }
-
-  function handleDragEnd({ over }) {
-    setIsDragging(false);
-    // Only the other piles' tabs are drop targets. Dropping anywhere else does nothing.
-    const pileId = over?.data.current?.pileId;
-    if (pileId === undefined || pileId === selectedKey || moveCards.isPending) return;
-    handleMove(pileId);
   }
 
   // PileTabs selects the new pile itself once this resolves.
@@ -297,44 +229,6 @@ function App() {
     }
   }
 
-  function handleRequestDeletePile() {
-    const { id, name, cardCount } = selectedPile;
-    setPileDeleteError(null);
-    setPileToDelete({ id, name, cardCount });
-  }
-
-  // Esc, "Keep it" and "Cancel" all land here; closing mid-request would hide the outcome.
-  function handleCancelDeletePile() {
-    if (deletePile.isPending) return;
-    setPileToDelete(null);
-  }
-
-  // cardsMode: undefined for an empty pile, 'keep' or 'delete' for a pile with cards.
-  async function handleConfirmDeletePile(cardsMode) {
-    const { id } = pileToDelete;
-    // Clear the old error first so a repeated failure re-renders (and re-announces) the alert.
-    setPileDeleteError(null);
-    try {
-      await deletePile.mutateAsync({ id, cardsMode });
-      setPileToDelete(null);
-      // Open the first pile that is left, so the deleted pile is not the remembered choice.
-      const firstPileLeft = piles.find((pile) => pile.id !== id);
-      if (firstPileLeft) setSelectedKey(firstPileLeft.id);
-    } catch (error) {
-      if (error instanceof ApiError && error.code === 'PILE_NOT_EMPTY' && error.details.cardCount > 0) {
-        // Cards were added elsewhere since the counts loaded. That is not an error: ask what to do
-        // with them, using the server's count (a count above 0 switches to the keep/delete dialog).
-        setPileToDelete((pile) => ({ ...pile, cardCount: error.details.cardCount }));
-      } else if (error instanceof ApiError && error.status === 404) {
-        // Already deleted elsewhere: there is nothing to retry, so close and resync.
-        setPileToDelete(null);
-        refetchCardsAndPiles();
-      } else {
-        setPileDeleteError(PILE_DELETE_ERROR);
-      }
-    }
-  }
-
   // The selected pile (or Unsorted): its header, the new-card form and its cards.
   function renderPilePanel() {
     const name = isUnsorted ? 'Unsorted' : selectedPile.name;
@@ -349,7 +243,7 @@ function App() {
         targets={piles.filter((pile) => pile.id !== selectedKey)}
         onMove={handleMove}
         onClear={clearSelection}
-        pending={moveCards.isPending}
+        pending={isMovePending}
         error={moveError}
       />
     ) : null;
@@ -372,7 +266,7 @@ function App() {
             headingId={panelHeadingId}
             existingPiles={piles}
             onRename={handleRenamePile}
-            onRequestDelete={handleRequestDeletePile}
+            onRequestDelete={() => pileDelete.requestDeletePile(selectedPile)}
             newCardOpen={newCardOpen}
             onToggleNewCard={() => setNewCardOpen((open) => !open)}
             newCardButtonRef={newCardButtonRef}
@@ -436,9 +330,9 @@ function App() {
         sensors={dragSensors}
         collisionDetection={pointerWithin}
         accessibility={DRAG_ACCESSIBILITY}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => setIsDragging(false)}
+        onDragStart={pileDrag.handleDragStart}
+        onDragEnd={pileDrag.handleDragEnd}
+        onDragCancel={pileDrag.handleDragCancel}
       >
         <div className="flex flex-col">
           <PileTabs
@@ -451,7 +345,7 @@ function App() {
           {renderPilePanel()}
         </div>
         {/* No drop animation: after a move the dragged cards are gone from this pile. */}
-        <DragOverlay dropAnimation={null}>{isDragging && <DragGhost count={selectedIds.length} />}</DragOverlay>
+        <DragOverlay dropAnimation={null}>{pileDrag.isDragging && <DragGhost count={selectedIds.length} />}</DragOverlay>
       </DndContext>
     );
   }
@@ -501,26 +395,26 @@ function App() {
       />
 
       <ConfirmDialog
-        open={pileToDelete !== null && pileToDelete.cardCount === 0}
-        title={pileToDelete ? `Delete the ${pileToDelete.name} pile?` : ''}
+        open={pileDelete.pileToDelete !== null && pileDelete.pileToDelete.cardCount === 0}
+        title={pileDelete.pileToDelete ? `Delete the ${pileDelete.pileToDelete.name} pile?` : ''}
         message="It has no cards, so nothing else is lost."
         confirmLabel="Delete pile"
         cancelLabel="Keep it"
-        onConfirm={() => handleConfirmDeletePile(undefined)}
-        onCancel={handleCancelDeletePile}
-        pending={deletePile.isPending}
-        error={pileDeleteError}
+        onConfirm={() => pileDelete.confirmDeletePile(undefined)}
+        onCancel={pileDelete.cancelDeletePile}
+        pending={pileDelete.isDeletePending}
+        error={pileDelete.pileDeleteError}
       />
 
       <DeletePileDialog
-        open={pileToDelete !== null && pileToDelete.cardCount > 0}
-        pileName={pileToDelete?.name ?? ''}
-        cardCount={pileToDelete?.cardCount ?? 0}
-        onKeep={() => handleConfirmDeletePile('keep')}
-        onDeleteCards={() => handleConfirmDeletePile('delete')}
-        onCancel={handleCancelDeletePile}
-        pending={deletePile.isPending}
-        error={pileDeleteError}
+        open={pileDelete.pileToDelete !== null && pileDelete.pileToDelete.cardCount > 0}
+        pileName={pileDelete.pileToDelete?.name ?? ''}
+        cardCount={pileDelete.pileToDelete?.cardCount ?? 0}
+        onKeep={() => pileDelete.confirmDeletePile('keep')}
+        onDeleteCards={() => pileDelete.confirmDeletePile('delete')}
+        onCancel={pileDelete.cancelDeletePile}
+        pending={pileDelete.isDeletePending}
+        error={pileDelete.pileDeleteError}
       />
     </div>
   );
