@@ -19,14 +19,20 @@ npm run dev -w client  # client only
 
 ```
 client/              Vite + React frontend
-  src/api/           fetch wrapper for /api/cards (ApiError)
-  src/hooks/         TanStack Query hooks (useCards, useCreateCard, ...)
-  src/validation/    card validation rules shared by the forms
-  src/components/    CardForm, CardGrid, FlashCard, ConfirmDialog
+  src/api/           request.js (fetch wrapper, ApiError), cards.js, piles.js
+  src/hooks/         TanStack Query hooks (useCards, usePiles, ...); useSelectedPile,
+                     useCardSelection, useMoveSelection, usePileDelete, usePileDrag,
+                     useLongPress, useDragSensors
+  src/validation/    card and pile validation rules shared by the forms
+  src/components/    CardForm, CardGrid, FlashCard, ConfirmDialog, PileTabs, PileHeader,
+                     PileNameForm, DeletePileDialog, SelectionBar, NoPilesState, DragGhost
+  src/queryClient.js TanStack QueryClient setup (retry rules)
+  src/test/fakeApi.js  fetch stubs for component tests
 server/              Express API
   src/app.js         Route handlers
   src/index.js       Entry point
-  src/db.js          Sequelize instance + Card model
+  src/db.js          Sequelize instance + Card and Pile models
+  src/migrate.js     Upgrades a pre-piles database (adds pileId; old cards go to "General")
   src/seed.js        Idempotent seed function (fills an empty table only)
   src/schemas/       Zod request schemas
 e2e/                 Playwright end-to-end tests

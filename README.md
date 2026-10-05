@@ -28,7 +28,9 @@ npm run dev
 
 Open http://localhost:5173. The API runs on http://localhost:3001.
 The database is created automatically at `server/flashcards.db`, and
-an empty database is populated with sample piles and cards.
+an empty database is populated with sample piles and cards. Upgrading
+from a version without piles? On first start, the cards already in
+your database move into a new "General" pile.
 
 ### Development checks
 
@@ -43,8 +45,9 @@ npm run e2e
 
 Every card lives in a pile, like Geography, Math or Law. Each pile has
 a tab above the cards that shows its name and card count. Click a tab
-to open that pile, or **+ New pile** to make another one. A new app
-with no piles asks you to make your first pile before your first card.
+to open that pile, or **+ New pile** to make another one. With no piles
+at all (say, after deleting every one), the app asks you to make a pile
+before your first card.
 
 - **Rename** and **Delete pile** sit in the pile's header. Deleting a
   pile that still has cards asks what to do with them: keep them, or
@@ -56,8 +59,9 @@ with no piles asks you to make your first pile before your first card.
 - **Drag** selected cards onto another pile's tab to move them there.
   The tab says `Drop into ‹Name›` while the cards are over it.
 - **Move to…** in the selection bar does the same without dragging:
-  pick a pile and press **Move**. It works with a keyboard and screen
-  reader.
+  pick a pile and press **Move**. Once cards are selected, Move to…
+  works with a keyboard and screen reader; selecting cards needs a
+  press and hold for now.
 
 ## API
 
