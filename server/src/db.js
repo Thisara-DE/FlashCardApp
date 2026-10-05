@@ -14,6 +14,18 @@ export const sequelize = new Sequelize({
   logging: false,
 });
 
+// SQLite allows one transaction at a time, and the in-memory database shares a single
+// connection, so two overlapping transactions fail ("cannot start a transaction within a
+// transaction"). This queue makes each transaction wait for the one before it.
+let lastTransaction = Promise.resolve();
+
+export function runInTransaction(work) {
+  // A failed transaction must not block the queue, so the next one starts either way.
+  const result = lastTransaction.then(() => sequelize.transaction(work));
+  lastTransaction = result.catch(() => {});
+  return result;
+}
+
 // Zod checks input at the API boundary; the length rules here are a safety net.
 export const Pile = sequelize.define('Pile', {
   name: {
