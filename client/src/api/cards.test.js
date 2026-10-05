@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, createCard, deleteCard, listCards, updateCard } from './cards.js';
+import { ApiError, createCard, deleteCard, listCards, moveCards, updateCard } from './cards.js';
 
 // Build a minimal fake fetch Response.
 function respond(status, body) {
@@ -15,25 +15,46 @@ describe('cards API', () => {
     vi.unstubAllGlobals();
   });
 
-  it('listCards() fetches /api/cards and returns the parsed array', async () => {
-    const cards = [{ id: 1, question: 'Q', answer: 'A' }];
+  it("listCards(pileId) fetches that pile's cards and returns the parsed array", async () => {
+    const cards = [{ id: 1, question: 'Q', answer: 'A', pileId: 3 }];
     fetch.mockResolvedValue(respond(200, cards));
 
-    await expect(listCards()).resolves.toEqual(cards);
-    expect(fetch).toHaveBeenCalledWith('/api/cards', expect.anything());
+    await expect(listCards(3)).resolves.toEqual(cards);
+    expect(fetch).toHaveBeenCalledWith('/api/cards?pileId=3', expect.anything());
   });
 
-  it('createCard() POSTs the card as JSON', async () => {
-    const created = { id: 2, question: 'Q', answer: 'A' };
+  it("listCards('unsorted') fetches the cards without a pile", async () => {
+    fetch.mockResolvedValue(respond(200, []));
+
+    await listCards('unsorted');
+
+    expect(fetch).toHaveBeenCalledWith('/api/cards?pileId=unsorted', expect.anything());
+  });
+
+  it('createCard() POSTs the card, including its pile, as JSON', async () => {
+    const created = { id: 2, question: 'Q', answer: 'A', pileId: 3 };
     fetch.mockResolvedValue(respond(201, created));
 
-    await expect(createCard({ question: 'Q', answer: 'A' })).resolves.toEqual(created);
+    await expect(createCard({ question: 'Q', answer: 'A', pileId: 3 })).resolves.toEqual(created);
     expect(fetch).toHaveBeenCalledWith(
       '/api/cards',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ question: 'Q', answer: 'A' }),
+        body: JSON.stringify({ question: 'Q', answer: 'A', pileId: 3 }),
+      }),
+    );
+  });
+
+  it('moveCards() POSTs the card ids and target pile to /api/cards/move', async () => {
+    fetch.mockResolvedValue(respond(200, { movedCount: 2 }));
+
+    await expect(moveCards({ cardIds: [1, 2], pileId: 3 })).resolves.toEqual({ movedCount: 2 });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/cards/move',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ cardIds: [1, 2], pileId: 3 }),
       }),
     );
   });
@@ -91,7 +112,7 @@ describe('cards API', () => {
       },
     });
 
-    const error = await listCards().catch((e) => e);
+    const error = await listCards(1).catch((e) => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({

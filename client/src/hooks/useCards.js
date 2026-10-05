@@ -1,31 +1,33 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createCard, deleteCard, listCards, updateCard } from '../api/cards.js';
+import { useQuery } from '@tanstack/react-query';
+import { createCard, deleteCard, listCards, moveCards, updateCard } from '../api/cards.js';
+import { CARDS_KEY, useSyncedMutation } from './useSyncedMutation.js';
 
-const CARDS_KEY = ['cards'];
-
-export function useCards() {
-  return useQuery({ queryKey: CARDS_KEY, queryFn: listCards });
-}
-
-// Each mutation refetches the list on success so the UI always matches the server.
-function useCardMutation(mutationFn) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CARDS_KEY }),
+// One cache entry per pile, all under ['cards'] so a single invalidation refreshes every pile.
+// pileKey is null while there is no pile to show, which keeps the query switched off.
+export function useCards(pileKey) {
+  return useQuery({
+    queryKey: [...CARDS_KEY, pileKey],
+    queryFn: () => listCards(pileKey),
+    enabled: pileKey !== null,
   });
 }
 
+// Variables: { question, answer, pileId }
 export function useCreateCard() {
-  return useCardMutation(createCard);
+  return useSyncedMutation(createCard);
 }
 
 // Variables: { id, question, answer }
 export function useUpdateCard() {
-  return useCardMutation(({ id, question, answer }) => updateCard(id, { question, answer }));
+  return useSyncedMutation(({ id, question, answer }) => updateCard(id, { question, answer }));
 }
 
 // Variables: the card id
 export function useDeleteCard() {
-  return useCardMutation(deleteCard);
+  return useSyncedMutation(deleteCard);
+}
+
+// Variables: { cardIds, pileId }
+export function useMoveCards() {
+  return useSyncedMutation(moveCards);
 }

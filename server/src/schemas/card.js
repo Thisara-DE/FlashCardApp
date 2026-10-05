@@ -20,6 +20,44 @@ export const cardSchema = z.object({
   answer: cardText('Answer'),
 });
 
+// A pile id sent in a JSON body: a positive whole number, with one message for every failure.
+const pileIdField = (message) =>
+  z.number({ required_error: message, invalid_type_error: message }).int(message).positive(message);
+
+// Every new card goes into a pile.
+export const createCardSchema = cardSchema.extend({
+  pileId: pileIdField('Pick a pile for this card'),
+});
+
+// Query strings are always text, so we check the format first and then convert.
+// A repeated param (?pileId=1&pileId=2) arrives as an array and fails the string check.
+const PILE_FILTER_MESSAGE = 'pileId must be a pile id or "unsorted"';
+export const cardsQuerySchema = z.object({
+  pileId: z
+    .string({ required_error: 'pileId is required', invalid_type_error: PILE_FILTER_MESSAGE })
+    .regex(/^([1-9]\d*|unsorted)$/, PILE_FILTER_MESSAGE)
+    .transform((value) => (value === 'unsorted' ? value : Number(value))),
+});
+
+const MAX_MOVE_CARDS = 100;
+const MOVE_COUNT_MESSAGE = `Pick between 1 and ${MAX_MOVE_CARDS} cards`;
+
+export const moveCardsSchema = z.object({
+  cardIds: z
+    .array(
+      z
+        .number({ invalid_type_error: 'Each card id must be a whole number' })
+        .int('Each card id must be a whole number')
+        .positive('Each card id must be a whole number'),
+      { required_error: MOVE_COUNT_MESSAGE, invalid_type_error: MOVE_COUNT_MESSAGE },
+    )
+    .min(1, MOVE_COUNT_MESSAGE)
+    .max(MAX_MOVE_CARDS, MOVE_COUNT_MESSAGE)
+    // A Set drops duplicates, so a smaller Set means an id was listed twice.
+    .refine((ids) => new Set(ids).size === ids.length, 'Each card can only be listed once'),
+  pileId: pileIdField('Pick a pile to move the cards to'),
+});
+
 // Turns a ZodError into { question?: string, answer?: string } (first message per field).
 export function toFieldErrors(error) {
   const fieldErrors = error.flatten().fieldErrors;

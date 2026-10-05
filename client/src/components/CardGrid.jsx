@@ -1,21 +1,41 @@
-import { useId } from 'react';
 import PropTypes from 'prop-types';
+import { useDraggable } from '@dnd-kit/core';
 import FlashCard from './FlashCard.jsx';
 
 // Same white bordered panel look as the create form.
 const PANEL = 'border-4 border-ink bg-white p-7 shadow-[10px_10px_0_var(--color-ink)]';
 
+// One card, made draggable (the draggable id is the card id). Every other prop goes to FlashCard.
+// The card itself stays in place while dragging: App's DragOverlay draws the "N cards" ghost instead.
+function DraggableCardItem({ card, ...flashCardProps }) {
+  const { setNodeRef, listeners } = useDraggable({ id: card.id });
+  return (
+    <div ref={setNodeRef}>
+      <FlashCard card={card} {...flashCardProps} dragListeners={listeners} />
+    </div>
+  );
+}
+
+DraggableCardItem.propTypes = {
+  // The rest of the props are FlashCard's, and FlashCard checks them.
+  card: PropTypes.shape({ id: PropTypes.number.isRequired }).isRequired,
+};
+
+// The cards of one pile. It has no heading of its own: the pile panel's header names it.
 export default function CardGrid({
   cards,
   isLoading,
   isError,
   isFetching = false,
+  emptyMessage,
   onRetry,
   onSaveCard,
   onRequestDelete,
+  selectedIds = [],
+  selectionMode = false,
+  onLongPress,
+  onToggleSelect,
 }) {
-  const headingId = useId();
-
   function renderBody() {
     if (isLoading) {
       return (
@@ -48,7 +68,7 @@ export default function CardGrid({
     }
 
     if (!cards || cards.length === 0) {
-      return <p className={`${PANEL} text-xl font-bold`}>No cards yet — make your first one!</p>;
+      return <p className={`${PANEL} text-xl font-bold`}>{emptyMessage}</p>;
     }
 
     return (
@@ -57,10 +77,14 @@ export default function CardGrid({
         {/* Keying by id (not index) keeps each card's flip state when the list is refetched. */}
         {cards.map((card) => (
           <li key={card.id}>
-            <FlashCard
+            <DraggableCardItem
               card={card}
               onSave={(values) => onSaveCard(card.id, values)}
               onRequestDelete={onRequestDelete}
+              selected={selectedIds.includes(card.id)}
+              selectionMode={selectionMode}
+              onLongPress={onLongPress}
+              onToggleSelect={onToggleSelect}
             />
           </li>
         ))}
@@ -68,17 +92,7 @@ export default function CardGrid({
     );
   }
 
-  return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h2 id={headingId} className="font-display text-[32px] uppercase">
-          The pile
-        </h2>
-        <p className="text-base font-bold">Tap a card to flip it — newest on top</p>
-      </div>
-      {renderBody()}
-    </section>
-  );
+  return <div>{renderBody()}</div>;
 }
 
 CardGrid.propTypes = {
@@ -93,7 +107,16 @@ CardGrid.propTypes = {
   isError: PropTypes.bool.isRequired,
   // True while a (re)fetch is running; disables Retry so it cannot be spammed.
   isFetching: PropTypes.bool,
+  // Shown when the pile has no cards, e.g. "No cards in Math yet — make your first one!"
+  emptyMessage: PropTypes.string.isRequired,
   onRetry: PropTypes.func.isRequired,
   onSaveCard: PropTypes.func.isRequired,
   onRequestDelete: PropTypes.func.isRequired,
+  // Ids of the selected cards.
+  selectedIds: PropTypes.arrayOf(PropTypes.number),
+  // True while any card is selected.
+  selectionMode: PropTypes.bool,
+  // Both are called with a card id: after a press and hold, and on a tap in selection mode.
+  onLongPress: PropTypes.func.isRequired,
+  onToggleSelect: PropTypes.func.isRequired,
 };
