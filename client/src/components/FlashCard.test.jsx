@@ -190,6 +190,25 @@ describe('FlashCard', () => {
       expect(questionFace()).toHaveAttribute('aria-pressed', 'false');
     });
 
+    // While dragging is on, dnd-kit swallows the click after a hold, so the face never sees it.
+    // A key press on the (still focused) face afterwards must work the first time.
+    it.each(['Enter', ' '])('after a hold whose click never arrived, "%s" still works first time', (key) => {
+      vi.useFakeTimers();
+      const { onLongPress } = renderCard();
+      const face = questionFace();
+
+      fireEvent.pointerDown(face, { clientX: 5, clientY: 5 });
+      act(() => vi.advanceTimersByTime(400));
+      fireEvent.pointerUp(face, { clientX: 5, clientY: 5 });
+      expect(onLongPress).toHaveBeenCalledWith(card.id);
+
+      // A key press as a browser sends it: keydown, then the button's click (detail 0).
+      fireEvent.keyDown(face, { key });
+      fireEvent.click(face, { detail: 0 });
+
+      expect(answerFace()).toHaveAttribute('aria-pressed', 'true');
+    });
+
     it('a short press flips the card as usual', () => {
       vi.useFakeTimers();
       const { onLongPress } = renderCard();

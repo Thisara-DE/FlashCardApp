@@ -45,6 +45,13 @@ export function useLongPress(onLongPress, { delay = 400, tolerance = 8 } = {}) {
     if (distance > tolerance) cancelTimer();
   }
 
+  // A key press is never part of a long press. The click that ends a hold can be swallowed
+  // (dnd-kit does that after a drag), which leaves the flag set; without this, the next Enter or
+  // Space on the still-focused element would be ignored once.
+  function onKeyDown() {
+    firedRef.current = false;
+  }
+
   function consumeLongPress() {
     const fired = firedRef.current;
     firedRef.current = false;
@@ -58,6 +65,7 @@ export function useLongPress(onLongPress, { delay = 400, tolerance = 8 } = {}) {
       onPointerUp: cancelTimer,
       onPointerLeave: cancelTimer,
       onPointerCancel: cancelTimer,
+      onKeyDown,
     },
     consumeLongPress,
   };

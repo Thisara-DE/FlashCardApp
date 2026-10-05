@@ -119,4 +119,16 @@ describe('useLongPress', () => {
 
     expect(result.current.consumeLongPress()).toBe(false);
   });
+
+  it('clears the flag on a key press, so a lost click cannot swallow a keyboard click', () => {
+    const { handlers, result } = setup();
+
+    act(() => handlers().onPointerDown({ clientX: 10, clientY: 10 }));
+    act(() => vi.advanceTimersByTime(400));
+    act(() => handlers().onPointerUp({ clientX: 10, clientY: 10 }));
+    // No click arrived for that long press. Then Enter is pressed on the focused element.
+    act(() => handlers().onKeyDown({ key: 'Enter' }));
+
+    expect(result.current.consumeLongPress()).toBe(false);
+  });
 });
