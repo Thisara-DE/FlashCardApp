@@ -96,7 +96,7 @@ test('two held cards can be dragged onto another pile tab', async ({ page }) => 
   await expect(page.getByRole('listitem').filter({ hasText: question2 })).toBeVisible();
 });
 
-test('deleting a pile keeps its cards in Unsorted, and Move to… moves them into a pile', async ({ page }) => {
+test('deleting a pile keeps its cards in General, and Move to… moves them into a pile', async ({ page }) => {
   const pileName = uniqueName('Keep');
   const targetName = uniqueName('Target');
   const question = uniqueName('Kept card?');
@@ -112,10 +112,11 @@ test('deleting a pile keeps its cards in Unsorted, and Move to… moves them int
 
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('button', { name: `${pileName} · 1` })).toHaveCount(0);
-  // Other tests may have unsorted cards too, so match any count and look for our own card.
-  const unsortedTab = page.getByRole('button', { name: /^Unsorted · \d+$/ });
-  await unsortedTab.click();
-  await expect(page.getByRole('heading', { name: 'Unsorted', exact: true })).toBeVisible();
+  // Other tests may have cards in General too, so match any count and look for our own card.
+  const generalTab = page.getByRole('button', { name: /^General · \d+$/ });
+  await generalTab.click();
+  await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Unsorted/ })).toHaveCount(0);
   const card = page.getByRole('listitem').filter({ hasText: question });
   await expect(card).toBeVisible();
 
@@ -130,12 +131,6 @@ test('deleting a pile keeps its cards in Unsorted, and Move to… moves them int
 
   await expect(page.getByText(`Moved 1 card to ${targetName}`)).toBeAttached();
   await expect(page.getByRole('button', { name: `${targetName} · 1` })).toBeVisible();
-  // Other tests may have left their own cards in Unsorted, so the Unsorted tab can stay. Check that
-  // our card left Unsorted by asking the API rather than by the tab disappearing.
-  const response = await page.request.get('/api/cards?pileId=unsorted');
-  expect(response.ok()).toBe(true);
-  const unsortedQuestions = (await response.json()).map((unsorted) => unsorted.question);
-  expect(unsortedQuestions).not.toContain(question);
 
   await page.getByRole('button', { name: `${targetName} · 1` }).click();
   await expect(page.getByRole('heading', { name: targetName, exact: true })).toBeVisible();

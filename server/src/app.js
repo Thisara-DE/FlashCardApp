@@ -1,5 +1,5 @@
 import express from 'express';
-import { Card, Pile, runInTransaction } from './db.js';
+import { Card, Pile, GENERAL_PILE_NAME, runInTransaction } from './db.js';
 import {
   cardSchema,
   createCardSchema,
@@ -50,6 +50,15 @@ async function findDuplicatePile(name, exceptId) {
   const piles = await Pile.findAll();
   const wanted = name.toLowerCase();
   return piles.find((pile) => pile.id !== exceptId && pile.name.toLowerCase() === wanted);
+}
+
+// Returns the General pile, creating it when there is none, or null when `pileId` is General itself.
+async function findOrCreateGeneralPile(pileId, transaction) {
+  const piles = await Pile.findAll({ transaction });
+  const wanted = GENERAL_PILE_NAME.toLowerCase();
+  const existing = piles.find((pile) => pile.name.toLowerCase() === wanted);
+  if (existing) return existing.id === pileId ? null : existing;
+  return Pile.create({ name: GENERAL_PILE_NAME }, { transaction });
 }
 
 function sendDuplicatePile(res, existing) {
@@ -144,8 +153,11 @@ app.delete(
       const where = { pileId: pile.id };
       if (query.cards === 'delete') {
         await Card.destroy({ where, transaction });
-      } else {
-        await Card.update({ pileId: null }, { where, transaction });
+      } else if (cardCount > 0) {
+        // Kept cards go to General, the catch-all. Deleting General itself is the one case with
+        // nowhere to move them, so those cards become Unsorted.
+        const general = await findOrCreateGeneralPile(pile.id, transaction);
+        await Card.update({ pileId: general?.id ?? null }, { where, transaction });
       }
       await pile.destroy({ transaction });
     });

@@ -108,9 +108,16 @@ export function stubApi({ piles = [], cards = [] } = {}, overrides = {}) {
         }
         if (mode === 'delete') {
           state.cards = state.cards.filter((card) => card.pileId !== pile.id);
-        } else {
+        } else if (cardCount > 0) {
+          // Kept cards go to General (made when missing); General's own cards become Unsorted.
+          let general = findDuplicate(state.piles, 'General');
+          if (!general) {
+            general = { id: nextId++, name: 'General', createdAt: new Date().toISOString() };
+            state.piles.push(general);
+          }
+          const newPileId = general.id === pile.id ? null : general.id;
           state.cards.forEach((card) => {
-            if (card.pileId === pile.id) card.pileId = null;
+            if (card.pileId === pile.id) card.pileId = newPileId;
           });
         }
         state.piles = state.piles.filter((other) => other.id !== pile.id);
