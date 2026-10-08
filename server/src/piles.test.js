@@ -233,6 +233,31 @@ describe('DELETE /api/piles/:id', () => {
       }
       expect((await getList()).unsortedCount).toBe(unsortedBefore + 2);
     });
+
+    // The route waits in the transaction queue, so cards can change between the request
+    // arriving and the delete running. Faking the first count stands in for that change.
+    it('does not create General when the pile emptied before the delete ran', async () => {
+      const pile = await makePile('Emptied meanwhile');
+      vi.spyOn(Card, 'count').mockResolvedValueOnce(1);
+
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      expect(await Pile.findOne({ where: { name: 'General' } })).toBeNull();
+    });
+
+    it('moves a card into General when it arrived before the delete ran', async () => {
+      const pile = await makePile('Filled meanwhile');
+      const [card] = await makeCards(pile.id, 1);
+      vi.spyOn(Card, 'count').mockResolvedValueOnce(0);
+
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      const general = await Pile.findOne({ where: { name: 'General' } });
+      expect(general).not.toBeNull();
+      expect((await Card.findByPk(card.id)).pileId).toBe(general.id);
+    });
   });
 
   it('?cards=delete deletes its cards, then the pile', async () => {

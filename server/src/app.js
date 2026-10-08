@@ -153,9 +153,11 @@ app.delete(
       const where = { pileId: pile.id };
       if (query.cards === 'delete') {
         await Card.destroy({ where, transaction });
-      } else if (cardCount > 0) {
+      } else if ((await Card.count({ where, transaction })) > 0) {
         // Kept cards go to General, the catch-all. Deleting General itself is the one case with
         // nowhere to move them, so those cards become Unsorted.
+        // Counted again here, not reused from above: cards can change while this waits in the
+        // transaction queue, and a stale count would make an empty General or skip a card.
         const general = await findOrCreateGeneralPile(pile.id, transaction);
         await Card.update({ pileId: general?.id ?? null }, { where, transaction });
       }
