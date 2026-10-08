@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Project memory:** read `AGENTS.md` in this repo first (git-ignored, local only). It points to the operating rules and project memory, and those rules take precedence.
+
 ## Stack
 
 A flashcard app for studying via question/answer decks.
