@@ -242,6 +242,21 @@ describe('POST /api/cards/move', () => {
     expect((await Card.findByPk(b.id)).pileId).toBe(history.id);
   });
 
+  it('reports how many cards really moved, not how many were asked for', async () => {
+    const real = await makeCardIn(geography.id);
+    // Pretend both ids passed the existence check, as if 999999 was deleted just after it.
+    const count = vi.spyOn(Card, 'count').mockResolvedValueOnce(2);
+
+    const res = await request(app)
+      .post('/api/cards/move')
+      .send({ cardIds: [real.id, 999999], pileId: history.id });
+
+    count.mockRestore();
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ movedCount: 1 });
+    expect((await Card.findByPk(real.id)).pileId).toBe(history.id);
+  });
+
   it('moves nothing and returns 404 when one card id is unknown', async () => {
     const real = await makeCardIn(geography.id);
     const res = await request(app)
