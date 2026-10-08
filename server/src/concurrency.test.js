@@ -38,6 +38,7 @@ describe('overlapping write requests', () => {
 
     expect(moved.status).toBe(200);
     expect(deleted.status).toBe(204);
-    expect((await Card.findByPk(staying.id)).pileId).toBeNull();
+    const general = await Pile.findOne({ where: { name: 'General' } });
+    expect((await Card.findByPk(staying.id)).pileId).toBe(general.id);
   });
 });

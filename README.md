@@ -50,9 +50,12 @@ at all (say, after deleting every one), the app asks you to make a pile
 before your first card.
 
 - **Rename** and **Delete pile** sit in the pile's header. Deleting a
-  pile that still has cards asks what to do with them: keep them, or
+  pile that still has cards asks what to do with them: keep them (they move
+  to General), or
   delete them too.
-- **Unsorted** holds kept cards whose pile was deleted. Its tab only
+- **General** is the catch-all: kept cards from a deleted pile move there (it is
+  created when missing). **Unsorted** only holds cards left over when General
+  itself is deleted. Its tab only
   shows up while it has cards.
 - **Press and hold** a card for a moment to select it. Tap more cards to
   add them to the selection, and press **Clear** or Esc to stop.
@@ -75,7 +78,7 @@ http://localhost:3001. Errors come back as `{ error: { code, message } }`.
 | POST   | /api/piles                      | create a pile (name; trimmed, 1–40 chars, unique ignoring case)            |
 | PUT    | /api/piles/:id                  | rename a pile                                                               |
 | DELETE | /api/piles/:id                  | delete an empty pile (409 `PILE_NOT_EMPTY` with `details.cardCount` if it has cards) |
-| DELETE | /api/piles/:id?cards=keep       | delete a pile; its cards become Unsorted (`pileId` null)                    |
+| DELETE | /api/piles/:id?cards=keep       | delete a pile; its cards move to the General pile (made if missing; deleting General itself leaves them Unsorted) |
 | DELETE | /api/piles/:id?cards=delete     | delete a pile and its cards                                                 |
 | GET    | /api/cards?pileId=:id           | list one pile's cards, newest first (`pileId` is required)                  |
 | GET    | /api/cards?pileId=unsorted      | list the cards without a pile, newest first                                 |

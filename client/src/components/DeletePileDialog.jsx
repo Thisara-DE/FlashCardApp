@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { GENERAL_PILE_NAME, isGeneralPile } from '../validation/pile.js';
 
 const BUTTON_BASE =
   'pop-btn min-h-11 cursor-pointer border-4 border-ink px-4 py-2 shadow-[4px_4px_0_var(--color-ink)]';
@@ -16,7 +17,8 @@ function deleteCardsText(count) {
     : `All ${count} cards are gone for good. No take-backs.`;
 }
 
-// Asks what should happen to a non-empty pile's cards: keep them (they go to Unsorted) or delete them.
+// Asks what should happen to a non-empty pile's cards: keep them (they go to General) or delete them.
+// Deleting General itself is the exception: its kept cards go to Unsorted.
 // Opening and closing work exactly like ConfirmDialog.
 export default function DeletePileDialog({
   open,
@@ -89,7 +91,10 @@ export default function DeletePileDialog({
         {/* The {' '} keeps a space between label and subtext in the button's accessible name. */}
         <button type="button" disabled={pending} onClick={onKeep} className={`${CHOICE} bg-mint`}>
           <strong className="text-lg">Keep the cards</strong>{' '}
-          <span className="font-medium">They move to Unsorted, so you can drag them into another pile later.</span>
+          <span className="font-medium">
+            They move to {isGeneralPile(pileName) ? 'Unsorted' : `the ${GENERAL_PILE_NAME} pile`}, so you can drag
+            them into another pile later.
+          </span>
         </button>
         <button type="button" disabled={pending} onClick={onDeleteCards} className={`${CHOICE} bg-pop`}>
           <strong className="text-lg">Delete the cards too</strong>{' '}

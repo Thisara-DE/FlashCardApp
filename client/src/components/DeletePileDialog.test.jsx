@@ -40,7 +40,7 @@ describe('DeletePileDialog', () => {
     expect(screen.getByRole('dialog', { name: TITLE })).toBeInTheDocument();
     expect(screen.getByText('It still has 12 cards. What should happen to them?')).toBeInTheDocument();
     expect(keepButton()).toHaveAccessibleName(
-      'Keep the cards They move to Unsorted, so you can drag them into another pile later.',
+      'Keep the cards They move to the General pile, so you can drag them into another pile later.',
     );
     expect(deleteCardsButton()).toHaveAccessibleName(
       'Delete the cards too All 12 cards are gone for good. No take-backs.',
@@ -53,6 +53,14 @@ describe('DeletePileDialog', () => {
 
     expect(screen.getByText('It still has 1 card. What should happen to them?')).toBeInTheDocument();
     expect(screen.getByText('That card is gone for good. No take-backs.')).toBeInTheDocument();
+  });
+
+  it('says the cards go to Unsorted when the pile being deleted is General itself', () => {
+    renderDialog({ pileName: 'general' });
+
+    expect(keepButton()).toHaveAccessibleName(
+      'Keep the cards They move to Unsorted, so you can drag them into another pile later.',
+    );
   });
 
   it('calls onKeep when Keep the cards is clicked', async () => {

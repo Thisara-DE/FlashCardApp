@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Project memory:** read `AGENTS.md` in this repo first (git-ignored, local only). It points to the operating rules and project memory, and those rules take precedence.
+
 ## Stack
 
 A flashcard app for studying via question/answer decks.
@@ -47,7 +49,7 @@ e2e/                 Playwright end-to-end tests
 | POST   | /api/piles                      | create a pile (name; trimmed, 1–40 chars, unique ignoring case)            |
 | PUT    | /api/piles/:id                  | rename a pile                                                               |
 | DELETE | /api/piles/:id                  | delete an empty pile (409 `PILE_NOT_EMPTY` with `details.cardCount` if it has cards) |
-| DELETE | /api/piles/:id?cards=keep       | delete a pile; its cards become Unsorted (`pileId` null)                    |
+| DELETE | /api/piles/:id?cards=keep       | delete a pile; its cards move to the General pile (made if missing; deleting General itself leaves them Unsorted) |
 | DELETE | /api/piles/:id?cards=delete     | delete a pile and its cards                                                 |
 | GET    | /api/cards?pileId=:id           | list one pile's cards, newest first (`pileId` is required)                  |
 | GET    | /api/cards?pileId=unsorted      | list the cards without a pile, newest first                                 |

@@ -26,6 +26,9 @@ export function runInTransaction(work) {
   return result;
 }
 
+// The catch-all pile: cards from a deleted pile (kept) and cards from an upgraded database land here.
+export const GENERAL_PILE_NAME = 'General';
+
 // Zod checks input at the API boundary; the length rules here are a safety net.
 export const Pile = sequelize.define('Pile', {
   name: {

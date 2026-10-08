@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import app from './app.js';
 import { sequelize, Pile, Card } from './db.js';
@@ -169,21 +169,95 @@ describe('DELETE /api/piles/:id', () => {
     expect(await Pile.findByPk(pile.id)).not.toBeNull();
   });
 
-  it('?cards=keep moves its cards to Unsorted, then deletes it', async () => {
-    const pile = await makePile('Keep me');
-    const cards = await makeCards(pile.id, 2);
-    const before = (await getList()).unsortedCount;
+  describe('?cards=keep', () => {
+    // General is the catch-all, so each test starts without one.
+    beforeEach(async () => {
+      await Pile.destroy({ where: { name: ['General', 'general'] } });
+    });
 
-    const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+    it('creates a General pile when there is none and moves the cards into it', async () => {
+      const pile = await makePile('Keep me');
+      const cards = await makeCards(pile.id, 2);
+      const unsortedBefore = (await getList()).unsortedCount;
 
-    expect(res.status).toBe(204);
-    expect(await Pile.findByPk(pile.id)).toBeNull();
-    for (const card of cards) {
-      const reloaded = await Card.findByPk(card.id);
-      expect(reloaded).not.toBeNull();
-      expect(reloaded.pileId).toBeNull();
-    }
-    expect((await getList()).unsortedCount).toBe(before + 2);
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      expect(await Pile.findByPk(pile.id)).toBeNull();
+      const general = await Pile.findOne({ where: { name: 'General' } });
+      expect(general).not.toBeNull();
+      for (const card of cards) {
+        expect((await Card.findByPk(card.id)).pileId).toBe(general.id);
+      }
+      const list = await getList();
+      expect(list.piles.find((p) => p.id === general.id).cardCount).toBe(2);
+      expect(list.unsortedCount).toBe(unsortedBefore);
+    });
+
+    it('reuses an existing General pile, ignoring case, and does not make a second one', async () => {
+      const general = await makePile('general');
+      const [existing] = await makeCards(general.id, 1);
+      const pile = await makePile('Keep me too');
+      const cards = await makeCards(pile.id, 2);
+
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      expect(await Pile.count({ where: { name: ['General', 'general'] } })).toBe(1);
+      for (const card of [existing, ...cards]) {
+        expect((await Card.findByPk(card.id)).pileId).toBe(general.id);
+      }
+    });
+
+    it('does not create General for an empty pile', async () => {
+      const pile = await makePile('Empty keep');
+
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      expect(await Pile.findOne({ where: { name: 'General' } })).toBeNull();
+    });
+
+    it('sends the cards of General itself to Unsorted, since it is the pile going away', async () => {
+      const general = await makePile('General');
+      const cards = await makeCards(general.id, 2);
+      const unsortedBefore = (await getList()).unsortedCount;
+
+      const res = await request(app).delete(`/api/piles/${general.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      expect(await Pile.findByPk(general.id)).toBeNull();
+      expect(await Pile.findOne({ where: { name: 'General' } })).toBeNull();
+      for (const card of cards) {
+        expect((await Card.findByPk(card.id)).pileId).toBeNull();
+      }
+      expect((await getList()).unsortedCount).toBe(unsortedBefore + 2);
+    });
+
+    // The route waits in the transaction queue, so cards can change between the request
+    // arriving and the delete running. Faking the first count stands in for that change.
+    it('does not create General when the pile emptied before the delete ran', async () => {
+      const pile = await makePile('Emptied meanwhile');
+      vi.spyOn(Card, 'count').mockResolvedValueOnce(1);
+
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      expect(await Pile.findOne({ where: { name: 'General' } })).toBeNull();
+    });
+
+    it('moves a card into General when it arrived before the delete ran', async () => {
+      const pile = await makePile('Filled meanwhile');
+      const [card] = await makeCards(pile.id, 1);
+      vi.spyOn(Card, 'count').mockResolvedValueOnce(0);
+
+      const res = await request(app).delete(`/api/piles/${pile.id}?cards=keep`);
+
+      expect(res.status).toBe(204);
+      const general = await Pile.findOne({ where: { name: 'General' } });
+      expect(general).not.toBeNull();
+      expect((await Card.findByPk(card.id)).pileId).toBe(general.id);
+    });
   });
 
   it('?cards=delete deletes its cards, then the pile', async () => {

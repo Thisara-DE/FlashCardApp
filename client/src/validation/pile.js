@@ -1,6 +1,13 @@
 // Same limit and messages as the server, so users see one wording.
 export const MAX_PILE_NAME = 40;
 
+// The catch-all pile that kept cards move into when their pile is deleted (same name as the server).
+export const GENERAL_PILE_NAME = 'General';
+
+export function isGeneralPile(name) {
+  return name.toLowerCase() === GENERAL_PILE_NAME.toLowerCase();
+}
+
 // Returns an error message, or undefined when the name is fine.
 // toLowerCase() (not a locale-specific fold) matches the server, so both agree on duplicates.
 export function validatePileName(name, existingPiles, { ignoreId } = {}) {

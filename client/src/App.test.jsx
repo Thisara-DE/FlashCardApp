@@ -491,7 +491,7 @@ describe('App', () => {
       expect(requestsMade(fetchMock).some((made) => made.startsWith('DELETE'))).toBe(false);
     });
 
-    it('Keep the cards sends ?cards=keep, shows the Unsorted tab, and moves selection to the first pile', async () => {
+    it('Keep the cards sends ?cards=keep, moves the cards to a General tab, and selects the first pile', async () => {
       localStorage.setItem(STORAGE_KEY, '2');
       const { fetchMock, user } = renderApp();
       await screen.findByText(squareRoot.question);
@@ -501,13 +501,29 @@ describe('App', () => {
       expect(within(dialog).getByText('It still has 1 card. What should happen to them?')).toBeInTheDocument();
       await user.click(within(dialog).getByRole('button', { name: /^Keep the cards/ }));
 
-      expect(await screen.findByRole('button', { name: 'Unsorted · 1' })).toHaveAttribute('aria-pressed', 'false');
+      expect(await screen.findByRole('button', { name: 'General · 1' })).toHaveAttribute('aria-pressed', 'false');
       expect(requestsMade(fetchMock)).toContain('DELETE /api/piles/2?cards=keep');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Math · / })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Unsorted/ })).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Geography · 2' })).toHaveAttribute('aria-pressed', 'true');
       expect(await screen.findByText(australia.question)).toBeInTheDocument();
       expect(localStorage.getItem(STORAGE_KEY)).toBe('1');
+    });
+
+    it('Keep the cards on General itself leaves its cards in Unsorted', async () => {
+      const general = { id: 3, name: 'General' };
+      const generalCard = { id: 31, question: 'Who wrote Hamlet?', answer: 'Shakespeare', pileId: 3 };
+      localStorage.setItem(STORAGE_KEY, '3');
+      const { user } = renderApp({ piles: [...PILES, general], cards: [...FIXTURE.cards, generalCard] });
+      await screen.findByText(generalCard.question);
+
+      await openDeletePile(user);
+      const dialog = screen.getByRole('dialog', { name: 'Delete the General pile?' });
+      await user.click(within(dialog).getByRole('button', { name: /^Keep the cards/ }));
+
+      expect(await screen.findByRole('button', { name: 'Unsorted · 1' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^General/ })).not.toBeInTheDocument();
     });
 
     it('Delete the cards too sends ?cards=delete and no Unsorted tab appears', async () => {

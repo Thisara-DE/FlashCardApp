@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import { sequelize, Card, Pile, runInTransaction } from './db.js';
+import { sequelize, Card, Pile, GENERAL_PILE_NAME, runInTransaction } from './db.js';
 
 // Upgrades a database created before piles existed. sync() creates the new
 // Piles table but never adds a column to an existing table, so Cards.pileId
@@ -18,7 +18,7 @@ export async function migrate() {
   // General pile that no card belongs to.
   await runInTransaction(async (transaction) => {
     if ((await Card.count({ transaction })) === 0) return;
-    const general = await Pile.create({ name: 'General' }, { transaction });
+    const general = await Pile.create({ name: GENERAL_PILE_NAME }, { transaction });
     await Card.update({ pileId: general.id }, { where: {}, transaction });
   });
 }
