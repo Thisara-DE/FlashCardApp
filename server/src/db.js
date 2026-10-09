@@ -1,5 +1,6 @@
 import { Sequelize, DataTypes } from 'sequelize';
 import { fileURLToPath } from 'node:url';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 // Tests use a throwaway in-memory database. Otherwise the file always lands in
 // server/, whatever directory the server is started from.
@@ -16,14 +17,30 @@ export const sequelize = new Sequelize({
 
 // SQLite allows one transaction at a time, and the in-memory database shares a single
 // connection, so two overlapping transactions fail ("cannot start a transaction within a
-// transaction"). This queue makes each transaction wait for the one before it.
-let lastTransaction = Promise.resolve();
+// transaction"). A plain write is not safe either: on the shared connection it would run
+// inside whatever transaction is open, and vanish if that one rolls back. So every write
+// waits its turn in this one queue.
+let lastWrite = Promise.resolve();
+
+// Remembers whether the code running now was started by the queue. A plain flag can't do this:
+// another request calling in while a write runs is fine (it just waits), but a call from
+// *inside* a queued write would wait for itself forever and block every later write.
+const insideQueuedWrite = new AsyncLocalStorage();
+
+export function runExclusive(work) {
+  if (insideQueuedWrite.getStore()) {
+    return Promise.reject(
+      new Error('Nested write: runExclusive/runInTransaction was called inside another one. Pass the transaction down instead.'),
+    );
+  }
+  const result = lastWrite.then(() => insideQueuedWrite.run(true, work));
+  // A failed write must not block the queue, so the next one starts either way.
+  lastWrite = result.catch(() => {});
+  return result;
+}
 
 export function runInTransaction(work) {
-  // A failed transaction must not block the queue, so the next one starts either way.
-  const result = lastTransaction.then(() => sequelize.transaction(work));
-  lastTransaction = result.catch(() => {});
-  return result;
+  return runExclusive(() => sequelize.transaction(work));
 }
 
 // The catch-all pile: cards from a deleted pile (kept) and cards from an upgraded database land here.

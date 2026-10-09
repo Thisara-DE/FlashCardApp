@@ -1,5 +1,5 @@
 import express from 'express';
-import { Card, Pile, GENERAL_PILE_NAME, runInTransaction } from './db.js';
+import { Card, Pile, GENERAL_PILE_NAME, runExclusive, runInTransaction } from './db.js';
 import {
   cardSchema,
   createCardSchema,
@@ -106,7 +106,7 @@ app.post(
     if (!data) return;
     const duplicate = await findDuplicatePile(data.name);
     if (duplicate) return sendDuplicatePile(res, duplicate);
-    const pile = await Pile.create(data);
+    const pile = await runExclusive(() => Pile.create(data));
     res.status(201).json(pileToJson(pile, 0));
   }),
 );
@@ -122,7 +122,7 @@ app.put(
     // Excluding this pile lets "math" be renamed to "Math".
     const duplicate = await findDuplicatePile(data.name, pile.id);
     if (duplicate) return sendDuplicatePile(res, duplicate);
-    await pile.update(data);
+    await runExclusive(() => pile.update(data));
     const cardCount = await Card.count({ where: { pileId: pile.id } });
     res.json(pileToJson(pile, cardCount));
   }),
@@ -199,7 +199,7 @@ app.post(
     const data = parseOr400(createCardSchema, req.body, res, 'Invalid card');
     if (!data) return;
     if (!(await findByIdOr404(Pile, String(data.pileId), res, 'Pile not found'))) return;
-    const card = await Card.create(data);
+    const card = await runExclusive(() => Card.create(data));
     res.status(201).json(card);
   }),
 );
@@ -219,10 +219,11 @@ app.post(
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Card not found' } });
     }
 
-    await runInTransaction(async (transaction) => {
-      await Card.update({ pileId }, { where: { id: cardIds }, transaction });
-    });
-    res.json({ movedCount: cardIds.length });
+    const [movedCount] = await runInTransaction((transaction) =>
+      Card.update({ pileId }, { where: { id: cardIds }, transaction }),
+    );
+    // The real number of rows changed, so a card deleted since the check above is not counted.
+    res.json({ movedCount });
   }),
 );
 
@@ -234,7 +235,7 @@ app.put(
     if (!card) return;
     const data = parseOr400(cardSchema, req.body, res, 'Invalid card');
     if (!data) return;
-    await card.update(data);
+    await runExclusive(() => card.update(data));
     res.json(card);
   }),
 );
@@ -244,7 +245,7 @@ app.delete(
   asyncHandler(async (req, res) => {
     const card = await findByIdOr404(Card, req.params.id, res, 'Card not found');
     if (!card) return;
-    await card.destroy();
+    await runExclusive(() => card.destroy());
     res.status(204).end();
   }),
 );
