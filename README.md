@@ -2,19 +2,56 @@
 
 **Study like it's loud.**
 
+![BrainCramBam showing the Geography pile with one card flipped to its answer](docs/images/piles-and-flip.png)
+
 Turn facts into flashcards and give your memory a workout. BrainCramBam
 pairs a bold, comic-inspired look with a simple study flow: write a
-question, flip for the answer, and keep your card pile fresh.
+question, flip for the answer, and keep each subject in its own pile.
 
-- Sort your cards into piles, one per subject, each with its own tab.
-- Create your own question-and-answer cards.
-- Flip cards to test your recall, then edit them inline or toss them
-  with a confirmation.
-- Press and hold cards to select them, then drag them onto another
-  pile's tab (or use **Move to…**).
-- Keep your cards between sessions with local SQLite storage.
+## Features
 
-Built with React, Vite, Tailwind CSS, Express, and Sequelize.
+### Flip to test yourself
+
+Every card has a question on the front and the answer on the back. Click
+a card to flip it, or tab to it and press Enter or Space. Say the answer
+out loud first, then flip to check.
+
+### Make your own cards
+
+Open a pile and use the pink button in its header (**New Geography card**,
+say) to add a card: type a question and an answer (up to 200 characters
+each) and **Slam it in!**
+Spotted a typo later? **Edit** changes a card right where it sits. **Toss**
+deletes it, but only after asking "Toss it for real?"
+
+### One pile per subject
+
+Piles are the tabs above your cards: Geography, History, Law, whatever
+you are studying. Each tab shows how many cards it holds, and a badge in
+the corner counts the cards in the pile you have open. Add a pile with
+**+ New pile**, and **Rename** or **Delete pile** from its header.
+
+### Move cards between piles
+
+Press and hold a card to select it, then tap more cards to add them.
+Drag your selection onto another pile's tab (it says `Drop into ‹Name›`
+while your cards hover over it), or pick a pile from **Move to…** and
+press **Move**. Changed your mind? Press **Clear** or Esc. Once cards are
+selected, **Move to…** also works with a keyboard and screen reader;
+selecting them needs a press and hold for now.
+
+![The Geography pile with one card selected and the Move to… bar showing](docs/images/select-and-move.png)
+
+### Deleting a pile doesn't have to lose your cards
+
+If the pile still has cards, you choose: **Keep the cards** (they move to
+a General pile) or **Delete the cards too**.
+
+### Saved on your computer
+
+Your piles and cards are stored in a local SQLite database, so they are
+still there next time. The first time you run the app it comes with a
+sample deck (Geography, History, Law, Math and Science) to play with.
 
 ## Quick start
 
@@ -28,11 +65,26 @@ npm run dev
 
 Open http://localhost:5173. The API runs on http://localhost:3001.
 The database is created automatically at `server/flashcards.db`, and
-an empty database is populated with sample piles and cards. Upgrading
+an empty database is populated with the sample piles and cards. Upgrading
 from a version without piles? On first start, the cards already in
 your database move into a new "General" pile.
 
-### Development checks
+## Good to know about piles
+
+- **General** is the catch-all: kept cards from a deleted pile move there (it is
+  created when missing).
+- **Unsorted** only holds cards left over when General itself is deleted. Its
+  tab only shows up while it has cards.
+- Pile names are 1–40 characters and must be unique, ignoring upper and
+  lower case.
+- With no piles at all (say, after deleting every one), the app asks you
+  to make a pile before your first card.
+
+## For developers
+
+Built with React, Vite, Tailwind CSS, Express, and Sequelize on SQLite.
+
+Run the checks:
 
 ```sh
 npm run lint
@@ -41,48 +93,4 @@ npx playwright install chromium
 npm run e2e
 ```
 
-## Using piles
-
-Every card lives in a pile, like Geography, Math or Law. Each pile has
-a tab above the cards that shows its name and card count. Click a tab
-to open that pile, or **+ New pile** to make another one. With no piles
-at all (say, after deleting every one), the app asks you to make a pile
-before your first card.
-
-- **Rename** and **Delete pile** sit in the pile's header. Deleting a
-  pile that still has cards asks what to do with them: keep them (they move
-  to General), or
-  delete them too.
-- **General** is the catch-all: kept cards from a deleted pile move there (it is
-  created when missing). **Unsorted** only holds cards left over when General
-  itself is deleted. Its tab only
-  shows up while it has cards.
-- **Press and hold** a card for a moment to select it. Tap more cards to
-  add them to the selection, and press **Clear** or Esc to stop.
-- **Drag** selected cards onto another pile's tab to move them there.
-  The tab says `Drop into ‹Name›` while the cards are over it.
-- **Move to…** in the selection bar does the same without dragging:
-  pick a pile and press **Move**. Once cards are selected, Move to…
-  works with a keyboard and screen reader; selecting cards needs a
-  press and hold for now.
-
-## API
-
-The Vite dev server proxies `/api/*` to the Express server on
-http://localhost:3001. Errors come back as `{ error: { code, message } }`.
-
-| Method | Path                            | Description                                                                 |
-| ------ | ------------------------------- | --------------------------------------------------------------------------- |
-| GET    | /api/ping                       | health check                                                                |
-| GET    | /api/piles                      | list piles, oldest first: `{ piles: [{ id, name, cardCount, createdAt }], unsortedCount }` |
-| POST   | /api/piles                      | create a pile (name; trimmed, 1–40 chars, unique ignoring case)            |
-| PUT    | /api/piles/:id                  | rename a pile                                                               |
-| DELETE | /api/piles/:id                  | delete an empty pile (409 `PILE_NOT_EMPTY` with `details.cardCount` if it has cards) |
-| DELETE | /api/piles/:id?cards=keep       | delete a pile; its cards move to the General pile (made if missing; deleting General itself leaves them Unsorted) |
-| DELETE | /api/piles/:id?cards=delete     | delete a pile and its cards                                                 |
-| GET    | /api/cards?pileId=:id           | list one pile's cards, newest first (`pileId` is required)                  |
-| GET    | /api/cards?pileId=unsorted      | list the cards without a pile, newest first                                 |
-| POST   | /api/cards                      | create a card (question, answer, pileId — required)                         |
-| PUT    | /api/cards/:id                  | update a card's question and answer (`pileId` is ignored)                   |
-| DELETE | /api/cards/:id                  | delete a card                                                               |
-| POST   | /api/cards/move                 | move cards to a pile (`{ cardIds, pileId }` → `{ movedCount }`)             |
+The server's routes are listed in the [API reference](docs/api.md).
